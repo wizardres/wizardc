@@ -7,14 +7,16 @@ int tok_value;                              /* "tok_value" point to tokenized nu
 token_t prev_tok,cur_tok;                  /* these two variables are for "pratt parse" */
 int prev_start{0},start{0},cur {0};       /* these three variables point to begining and ending of word that was tokenized */
 
-
-
 char advance() {
     return src[cur++];
 }
 
 char peek() {
     return src[cur];
+}
+
+char peek1() {
+    return src[cur+1];
 }
 
 void skip_blank() {
@@ -63,12 +65,26 @@ token_t token_identifier(char c) {
 }
 
 token_t token_operator(char c) {
+    char cc = peek();
+    token_t token;
     switch(c) {
-        case '+': return token_t::T_plus;
-        case '-': return token_t::T_minus;
-        case '*': return token_t::T_star;
-        case '/': return token_t::T_div;
+        case '+': token = token_t::T_plus;break;
+        case '-': token = token_t::T_minus;break;
+        case '*': token = token_t::T_star;break;
+        case '/': token = token_t::T_div;break;
+        case '<': token = cc == '=' ? token_t::T_le : token_t::T_lt;break;
+        case '>': token = cc == '=' ? token_t::T_ge : token_t::T_gt;break;
+        case '=': token = cc == '=' ? token_t::T_eq : token_t::T_assign;break;
+        case '!': token = cc == '=' ? token_t::T_neq : token_t::T_not;break;
     }
+    switch(token) {
+        case token_t::T_le:
+        case token_t::T_ge:
+        case token_t::T_eq:
+        case token_t::T_neq:
+        advance();
+    }
+    return token;
 }
 
 token_t scan_token() {
@@ -88,7 +104,9 @@ token_t scan_token() {
         return token_t::T_eof;
     }else if(is_operator(c)){
         return token_operator(c);
-    }else {
+    }else if(is_semicolon(c)){
+        return token_t::T_semicolon;
+    }else{
         error_at(start,1,std::format("invalid character:'{}'",c));
     }
 }
@@ -97,9 +115,6 @@ token_t scan_token() {
 void next_token() {
     prev_tok = cur_tok;
     cur_tok = scan_token();
-#ifdef DEBUG
-    std::cerr << std::format("{}:   '{}'\n", token_str.find(cur_tok)->second,std::string(src+start,src+cur));
-#endif
 }
 
 void token_expected(token_t expected,const char *msg) {
@@ -117,6 +132,12 @@ std::map<token_t,precedence_t> precedence {
     { token_t::T_minus,precedence_t::P_factor },
     { token_t::T_star,precedence_t::P_term },
     { token_t::T_div,precedence_t::P_term },
+    { token_t::T_lt,precedence_t::P_comparison },
+    { token_t::T_le,precedence_t::P_comparison },
+    { token_t::T_gt,precedence_t::P_comparison },
+    { token_t::T_ge,precedence_t::P_comparison },
+    { token_t::T_neq,precedence_t::P_comparison },
+    { token_t::T_eq,precedence_t::P_comparison },
 };
 
 std::map<token_t,prefix_call> prefixcalls {
@@ -130,7 +151,14 @@ std::map<token_t,infix_call> infixcalls {
     { token_t::T_minus, parse_binary_expr },
     { token_t::T_star, parse_binary_expr },
     { token_t::T_div, parse_binary_expr },
+    { token_t::T_lt, parse_binary_expr },
+    { token_t::T_le, parse_binary_expr },
+    { token_t::T_gt, parse_binary_expr },
+    { token_t::T_ge, parse_binary_expr },
+    { token_t::T_neq, parse_binary_expr },
+    { token_t::T_eq, parse_binary_expr },
 };
+
 precedence_t get_precedence(token_t token) {
     auto it = precedence.find(token);
     if(it != precedence.end()) {
@@ -166,6 +194,7 @@ infix_call get_infix_call(token_t t) {
     }
     return it->second;
 }
+
 
 std::unique_ptr<Expr> parse_numeric() {
     Expr *n = new numericExpr{ tok_value };
@@ -207,12 +236,18 @@ std::unique_ptr<Expr> parse_expr(precedence_t prec) {
     return left;
 }
 
+std::unique_ptr<Expr> expr_stmt() {
+    std::unique_ptr<Expr> e = parse_expr(precedence_t::P_none);
+    token_expected(token_t::T_semicolon,"expect ';'");
+    return e;
+}
+
 std::unique_ptr<Expr> parse() {
 #ifdef DEBUG
     std::cerr << "get tokens:\n";
 #endif
     next_token();
-    return parse_expr(precedence_t::P_none);
+    return expr_stmt();
 }
 
 
