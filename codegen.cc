@@ -52,8 +52,8 @@ void binaryExpr::codegen() {
 }
 
 
-void codegen(const std::unique_ptr<Expr>& e) {
+void codegen(const std::unique_ptr<Stmt>& stmt) {
     std::cout << std::format("   .global main\nmain:\n");
-    e->codegen();
+    stmt->codegen();
     std::cout << std::format("  ret\n");
 }

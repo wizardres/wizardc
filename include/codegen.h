@@ -2,5 +2,5 @@
 #define CODEGEN_H_
 
 #include "parse.h"
-void codegen(const std::unique_ptr<Expr>& e);
+void codegen(const std::unique_ptr<Stmt>& stmt);
 #endif

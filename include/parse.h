@@ -8,6 +8,7 @@
 #include <memory>
 #include <functional>
 #include <format>
+#include <vector>
 
 enum class token_t {
     T_num,
@@ -19,6 +20,10 @@ enum class token_t {
     T_div,
     T_open_paren,   /* '(' */
     T_close_paren,  /* ')' */
+    T_open_square,   /* '[' */
+    T_close_square,  /* ']' */
+    T_open_block,   /* '{' */
+    T_close_block,  /* '}' */
     T_semicolon,    /* ';' */
     T_lt,           /* '<' */
     T_gt,           /* '>' */
@@ -35,8 +40,7 @@ enum class token_t {
 #define is_identifier(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
 #define is_number(c) ( c >= '0' && c <= '9')
 #define is_eof(c) (c == '\0')
-#define is_close_paren(c) (c == ')')
-#define is_open_paren(c) (c == '(')
+#define is_bracket(c) ( c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' )
 #define is_blank(c) (c == '\n' || c == '\t' || c == '\r' || c == ' ')
 #define is_semicolon(c) (c == ';')
 #define is_hex_num(c) ( (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') )
@@ -81,6 +85,47 @@ public:
     token_t op;
 };
 
+class Stmt {
+public:
+    Stmt()=default;
+    ~Stmt()=default;    
+    virtual void codegen()=0;
+};
+
+class exprStmt : public Stmt {
+public:
+    exprStmt(std::unique_ptr<Expr>& _expr):e(std::move(_expr)){};
+    ~exprStmt()=default;
+    void codegen()override{
+        e->codegen();
+    }
+    std::unique_ptr<Expr> e;
+};
+
+
+class blockStmt : public Stmt{
+public:
+    blockStmt(std::vector<std::unique_ptr<Stmt>>& _stmts):stmts(std::move(_stmts)){}
+    ~blockStmt()=default;
+    void codegen()override{
+        for(auto& stmt : stmts) {
+            stmt->codegen();
+        }
+    }
+    std::vector<std::unique_ptr<Stmt>> stmts;
+};
+
+
+class ifStmt : public Stmt{
+public:
+    std::unique_ptr<Expr> cond;
+    std::unique_ptr<Stmt> then;
+    std::unique_ptr<Stmt> elseStmt;
+    void codegen()override {
+
+    }
+};
+
 enum class precedence_t {
     P_none,
     P_atom,   /* numeric,identifier */
@@ -97,9 +142,11 @@ std::unique_ptr<Expr> parse_binary_expr(std::unique_ptr<Expr>& lhs);
 std::unique_ptr<Expr> parse_group_expr();
 std::unique_ptr<Expr> parse_expr(precedence_t );
 
+std::unique_ptr<Stmt> parse_stmt();
+
 using  prefix_call = std::function<std::unique_ptr<Expr>()>;
 using  infix_call = std::function<std::unique_ptr<Expr>(std::unique_ptr<Expr>& )>;
 
 
-std::unique_ptr<Expr> parse();
+std::unique_ptr<Stmt> parse();
 #endif

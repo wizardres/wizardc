@@ -1,11 +1,14 @@
 #include "include/parse.h"
 
 
-const char *src {nullptr};                    /* input string */
-std::string_view tok_str;                    /* "tok_str" is the tokenized string when token type is 'T_string' */
-int tok_value;                              /* "tok_value" point to tokenized numeric value if token type is 'T_num' */
-token_t prev_tok,cur_tok;                  /* these two variables are for "pratt parse" */
-int prev_start{0},start{0},cur {0};       /* these three variables point to begining and ending of word that was tokenized */
+const char *src {nullptr};    // source input                
+std::string_view tok_str;     // storing string if token is T_stirng              
+int tok_value;                // storing numeric value if token is T_numeric            
+token_t prev_tok;             // for pratt prase
+token_t cur_tok;              // for pratt parse
+int prev_start{0};            
+int start{0};
+int cur{0};       
 
 char advance() {
     return src[cur++];
@@ -13,10 +16,6 @@ char advance() {
 
 char peek() {
     return src[cur];
-}
-
-char peek1() {
-    return src[cur+1];
 }
 
 void skip_blank() {
@@ -87,19 +86,29 @@ token_t token_operator(char c) {
     return token;
 }
 
+token_t token_bracket(char c) {
+    switch(c) {
+        case '(': return token_t::T_open_paren;
+        case ')': return token_t::T_close_paren;
+        case '{': return token_t::T_open_block;
+        case '}': return token_t::T_close_block;
+        case '[': return token_t::T_open_square;
+        case ']': return token_t::T_close_square;
+    }
+}
+
 token_t scan_token() {
     skip_blank();
     prev_start = start;
     start = cur;
     char c = advance();
+
     if(is_number(c)) {
        return token_number(c);
     }else if(is_identifier(c)) {
        return token_identifier(c);
-    }else if(is_open_paren(c)) {
-        return token_t::T_open_paren;
-    }else if(is_close_paren(c)) {
-        return token_t::T_close_paren;
+    }else if(is_bracket(c)) {
+        return token_bracket(c);
     }else if(is_eof(c)) {
         return token_t::T_eof;
     }else if(is_operator(c)){
@@ -236,18 +245,32 @@ std::unique_ptr<Expr> parse_expr(precedence_t prec) {
     return left;
 }
 
-std::unique_ptr<Expr> expr_stmt() {
+std::unique_ptr<Stmt> expr_stmt() {
     std::unique_ptr<Expr> e = parse_expr(precedence_t::P_none);
     token_expected(token_t::T_semicolon,"expect ';'");
-    return e;
+    return std::make_unique<exprStmt>(e);
 }
 
-std::unique_ptr<Expr> parse() {
-#ifdef DEBUG
-    std::cerr << "get tokens:\n";
-#endif
+std::unique_ptr<Stmt> block_stmt() {
+    std::vector<std::unique_ptr<Stmt>> stmts;
+    while(cur_tok != token_t::T_eof && cur_tok != token_t::T_close_block) {
+        stmts.emplace_back(parse_stmt());
+    }
+    token_expected(token_t::T_close_block,"expect '}'");
+    return std::make_unique<blockStmt>(stmts);
+}
+
+std::unique_ptr<Stmt> parse_stmt() {
+    if(cur_tok == token_t::T_open_block) {
+        next_token();
+        return block_stmt();
+    }else{
+        return expr_stmt();
+    }
+}
+
+std::unique_ptr<Stmt> parse() {
     next_token();
-    return expr_stmt();
+    std::unique_ptr<Stmt> stmt = parse_stmt();
+    return stmt;
 }
-
-

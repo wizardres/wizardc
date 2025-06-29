@@ -31,5 +31,6 @@ assert 1 "10 >= (1+1);"
 assert 1 "1 <= 2;"
 assert 1 "-1 == 0-1;"
 assert 1 "1 != 2;"
-
+assert 11 "{10+1;}"
+assert 20 "{15+1;12-1+9;}"
 afterexit
