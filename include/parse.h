@@ -62,6 +62,13 @@ public:
     int value;
 };
 
+class identfierExpr : public Expr {
+public:
+    identfierExpr(std::string_view _name):name(_name) {}
+    ~identfierExpr()=default;
+    void codegen(){};
+    std::string_view name;
+};
 
 class prefixExpr : public Expr {
 public:
@@ -118,12 +125,18 @@ public:
 
 class ifStmt : public Stmt{
 public:
+    ifStmt(std::unique_ptr<Expr> &_cond,
+           std::unique_ptr<Stmt>& _then,
+           std::unique_ptr<Stmt>& _else):
+                    cond(std::move(_cond)),
+                    then(std::move(_then)),
+                    elseStmt(std::move(_else)) { }
+    ~ifStmt()=default;
     std::unique_ptr<Expr> cond;
     std::unique_ptr<Stmt> then;
     std::unique_ptr<Stmt> elseStmt;
-    void codegen()override {
-
-    }
+    void codegen()override;
+    static inline int level{1};
 };
 
 enum class precedence_t {
@@ -137,12 +150,14 @@ enum class precedence_t {
 
 
 std::unique_ptr<Expr> parse_numeric();
+std::unique_ptr<Expr> parse_ident();
 std::unique_ptr<Expr> parse_prefix();
 std::unique_ptr<Expr> parse_binary_expr(std::unique_ptr<Expr>& lhs);
 std::unique_ptr<Expr> parse_group_expr();
 std::unique_ptr<Expr> parse_expr(precedence_t );
 
 std::unique_ptr<Stmt> parse_stmt();
+std::unique_ptr<Stmt> if_stmt();
 
 using  prefix_call = std::function<std::unique_ptr<Expr>()>;
 using  infix_call = std::function<std::unique_ptr<Expr>(std::unique_ptr<Expr>& )>;

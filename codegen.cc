@@ -52,6 +52,22 @@ void binaryExpr::codegen() {
 }
 
 
+void ifStmt::codegen() {
+    int l = level++;
+    cond->codegen();
+    std::string out;
+    std::cout << "  cmp $0,%rax\n";
+    std::string label = elseStmt == nullptr ? std::format(".L.end.{}",l) : std::format(".L.else.{}",l);
+    std::cout << std::format("  je {}\n",label);
+    then->codegen();
+    if(elseStmt != nullptr) {
+        std::cout << std::format("  jmp .L.end.{}\n",l);
+        std::cout << std::format(".L.else.{}:\n",l);
+        elseStmt->codegen();
+    }
+    std::cout << std::format(".L.end.{}:\n",l);
+}
+
 void codegen(const std::unique_ptr<Stmt>& stmt) {
     std::cout << std::format("   .global main\nmain:\n");
     stmt->codegen();
