@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <map>
+#include <unordered_set>
 #include <memory>
 #include <functional>
 #include <format>
@@ -14,6 +15,7 @@ enum class token_t {
     T_num,
     T_string,
     T_identifier,
+    T_keyword,
     T_plus,
     T_minus,
     T_star, // '*'
@@ -36,6 +38,12 @@ enum class token_t {
     T_eof,
 };
 
+enum class node_t {
+    N_numeric,
+    N_identifier,
+    N_prefix,
+    N_binary,
+};
 
 #define is_identifier(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
 #define is_number(c) ( c >= '0' && c <= '9')
@@ -50,29 +58,47 @@ enum class token_t {
 class Expr {
 public:
     Expr()=default;
+    Expr(node_t _type,int _idx,int _len):
+                   ntype(_type),
+                   charidx(_idx),
+                   charlen(_len){}
     virtual ~Expr()=default;
     virtual void codegen()=0;
+
+    node_t ntype;
+    int charidx;
+    int charlen;
 };
 
 class numericExpr : public Expr {
 public:
-    numericExpr(int _val):value(_val){}
+    numericExpr(int _val,int idx,int len):
+                    value(_val),
+                    Expr(node_t::N_numeric,idx,len){}
     ~numericExpr()=default;
     void codegen()override;
     int value;
 };
 
-class identfierExpr : public Expr {
+class identifierExpr : public Expr {
 public:
-    identfierExpr(std::string_view _name):name(_name) {}
-    ~identfierExpr()=default;
-    void codegen(){};
-    std::string_view name;
+    identifierExpr(int _offset,int idx,int len):
+                    offset(_offset),
+                    Expr(node_t::N_identifier,idx,len) {}
+    ~identifierExpr()=default;
+    void codegen();
+
+    int offset;
+    static inline std::map<std::string_view,int> local_vars; 
+    static inline int var_offset{0};
 };
 
 class prefixExpr : public Expr {
 public:
-    prefixExpr(std::unique_ptr<Expr>& _e,token_t _op):e(std::move(_e)),op(_op){}
+    prefixExpr(std::unique_ptr<Expr>& _e,token_t _op,int idx,int len)
+                :e(std::move(_e)),
+                op(_op),
+                Expr(node_t::N_prefix,idx,len){}
     void codegen()override;
     std::unique_ptr<Expr> e;
     token_t op;
@@ -80,8 +106,11 @@ public:
 
 class binaryExpr : public Expr {
 public:
-    binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token_t _op)
-                                    :lhs(std::move(_l)),rhs(std::move(_r)),op(_op){}
+    binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token_t _op,int idx,int len)
+                                    :lhs(std::move(_l)),
+                                     rhs(std::move(_r)),
+                                     op(_op),
+                                     Expr(node_t::N_binary,idx,len) {}
     ~binaryExpr()=default;
     void codegen()override;
     void push() { std::cout << std::format("  push %rax\n"); }
@@ -139,9 +168,11 @@ public:
     static inline int level{1};
 };
 
+
 enum class precedence_t {
     P_none,
     P_atom,   /* numeric,identifier */
+    P_assign, // variable assignment
     P_comparison,  /* '>' '<' '!=' '==' '<=' '>=' */
     P_factor, /* '+'  '-'  */
     P_term,   /* '*' '/' */

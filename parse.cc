@@ -1,6 +1,6 @@
 #include "include/parse.h"
 
-const char *src {nullptr};    // source input                
+const char *src;    // source input                
 std::string_view tok_str;     // storing string if token is T_stirng              
 int tok_value;                // storing numeric value if token is T_numeric            
 token_t prev_tok;             // for pratt prase
@@ -8,6 +8,50 @@ token_t cur_tok;              // for pratt parse
 int prev_start{0};            
 int start{0};
 int cur{0};       
+
+std::unordered_set<std::string_view> keywords = {
+    "if",
+    "else",
+};
+
+
+std::map<token_t,precedence_t> precedence {
+    { token_t::T_num,precedence_t::P_none },
+    { token_t::T_eof,precedence_t::P_none },
+    { token_t::T_identifier,precedence_t::P_none },
+    { token_t::T_plus,precedence_t::P_factor },
+    { token_t::T_minus,precedence_t::P_factor },
+    { token_t::T_star,precedence_t::P_term },
+    { token_t::T_div,precedence_t::P_term },
+    { token_t::T_assign,precedence_t::P_assign },
+    { token_t::T_lt,precedence_t::P_comparison },
+    { token_t::T_le,precedence_t::P_comparison },
+    { token_t::T_gt,precedence_t::P_comparison },
+    { token_t::T_ge,precedence_t::P_comparison },
+    { token_t::T_neq,precedence_t::P_comparison },
+    { token_t::T_eq,precedence_t::P_comparison },
+};
+
+std::map<token_t,prefix_call> prefixcalls {
+    { token_t::T_num,parse_numeric },
+    { token_t::T_identifier,parse_ident },
+    { token_t::T_minus,parse_prefix },
+    { token_t::T_open_paren,parse_group_expr },
+};
+
+std::map<token_t,infix_call> infixcalls {
+    { token_t::T_plus, parse_binary_expr },
+    { token_t::T_minus, parse_binary_expr },
+    { token_t::T_star, parse_binary_expr },
+    { token_t::T_div, parse_binary_expr },
+    { token_t::T_lt, parse_binary_expr },
+    { token_t::T_le, parse_binary_expr },
+    { token_t::T_gt, parse_binary_expr },
+    { token_t::T_ge, parse_binary_expr },
+    { token_t::T_neq, parse_binary_expr },
+    { token_t::T_eq, parse_binary_expr },
+    { token_t::T_assign, parse_binary_expr },
+};
 
 char advance() {
     return src[cur++];
@@ -59,8 +103,10 @@ token_t token_number(char c) {
 token_t token_identifier(char c) {
     while(is_identifier(peek()) || is_number(peek())) advance();
     tok_str = std::string_view(src+start,src+cur);
+    if(keywords.find(tok_str) != keywords.end()) return token_t::T_keyword;
     return token_t::T_identifier;
 }
+
 
 token_t token_operator(char c) {
     char cc = peek();
@@ -132,42 +178,6 @@ void token_expected(token_t expected,const char *msg) {
     next_token();
 }
 
-std::map<token_t,precedence_t> precedence {
-    { token_t::T_num,precedence_t::P_none },
-    { token_t::T_eof,precedence_t::P_none },
-    { token_t::T_identifier,precedence_t::P_none },
-    { token_t::T_plus,precedence_t::P_factor },
-    { token_t::T_minus,precedence_t::P_factor },
-    { token_t::T_star,precedence_t::P_term },
-    { token_t::T_div,precedence_t::P_term },
-    { token_t::T_lt,precedence_t::P_comparison },
-    { token_t::T_le,precedence_t::P_comparison },
-    { token_t::T_gt,precedence_t::P_comparison },
-    { token_t::T_ge,precedence_t::P_comparison },
-    { token_t::T_neq,precedence_t::P_comparison },
-    { token_t::T_eq,precedence_t::P_comparison },
-};
-
-std::map<token_t,prefix_call> prefixcalls {
-    { token_t::T_num,parse_numeric },
-    { token_t::T_identifier,parse_ident },
-    { token_t::T_minus,parse_prefix },
-    { token_t::T_open_paren,parse_group_expr },
-};
-
-std::map<token_t,infix_call> infixcalls {
-    { token_t::T_plus, parse_binary_expr },
-    { token_t::T_minus, parse_binary_expr },
-    { token_t::T_star, parse_binary_expr },
-    { token_t::T_div, parse_binary_expr },
-    { token_t::T_lt, parse_binary_expr },
-    { token_t::T_le, parse_binary_expr },
-    { token_t::T_gt, parse_binary_expr },
-    { token_t::T_ge, parse_binary_expr },
-    { token_t::T_neq, parse_binary_expr },
-    { token_t::T_eq, parse_binary_expr },
-};
-
 precedence_t get_precedence(token_t token) {
     auto it = precedence.find(token);
     if(it != precedence.end()) {
@@ -206,18 +216,29 @@ infix_call get_infix_call(token_t t) {
 
 
 std::unique_ptr<Expr> parse_numeric() {
-    Expr *n = new numericExpr{ tok_value };
-    return std::make_unique<numericExpr>(tok_value);
+    return std::make_unique<numericExpr>(tok_value,start,cur-start);
 }
 
 std::unique_ptr<Expr> parse_ident() {
-    return std::make_unique<identfierExpr>(tok_str);
+    auto &locals = identifierExpr::local_vars;
+    int &cur_offset = identifierExpr::var_offset;
+    int offset;
+
+    auto it = locals.find(tok_str);
+    if(it == locals.end()) {
+        cur_offset-=8;
+        locals.insert({tok_str,cur_offset});
+        offset = cur_offset;
+    }else{
+        offset = it->second;
+    }
+    return std::make_unique<identifierExpr>(offset,start,cur-start);
 }
 
 std::unique_ptr<Expr> parse_prefix() {
     token_t op = prev_tok;
     std::unique_ptr<Expr> e = parse_expr(precedence_t::P_prefix);
-    return std::make_unique<prefixExpr>(e,op);
+    return std::make_unique<prefixExpr>(e,op,start,cur-start);
 }
 
 std::unique_ptr<Expr> parse_group_expr() {
@@ -230,7 +251,7 @@ std::unique_ptr<Expr> parse_binary_expr(std::unique_ptr<Expr> &lhs) {
     token_t op = prev_tok;
     auto precedence = get_precedence(prev_tok);
     std::unique_ptr<Expr> rhs = parse_expr(precedence);
-    return std::make_unique<binaryExpr>(lhs,rhs,op);
+    return std::make_unique<binaryExpr>(lhs,rhs,op,start,cur-start);
 }
 
 
@@ -271,7 +292,7 @@ std::unique_ptr<Stmt> if_stmt() {
     token_expected(token_t::T_close_paren,"expect ')' after condition");
     std::unique_ptr<Stmt> _then = parse_stmt();
     std::unique_ptr<Stmt> _else;
-    if(cur_tok == token_t::T_identifier && tok_str == "else") {
+    if(cur_tok == token_t::T_keyword && tok_str == "else") {
         next_token();
         _else = parse_stmt();
         return std::make_unique<ifStmt>(_cond,_then,_else);
@@ -284,7 +305,7 @@ std::unique_ptr<Stmt> parse_stmt() {
     if(cur_tok == token_t::T_open_block) {
         next_token();
         return block_stmt();
-    }else if(cur_tok == token_t::T_identifier){
+    }else if(cur_tok == token_t::T_keyword){
         if(tok_str == "if") {
             next_token();
             return if_stmt();

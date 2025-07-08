@@ -9,7 +9,20 @@ void prefixExpr::codegen() {
     std::cout << std::format("  neg %rax\n");
 }
 
+void identifierExpr::codegen() {
+    std::cout << std::format("  mov {}(%rbp),%rax\n",offset);
+}
+
+
 void binaryExpr::codegen() {
+    if(op == token_t::T_assign) {
+        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identifierExpr*>(lhs.get())->offset);
+        push();
+        rhs->codegen();
+        pop("%rdi");
+        std::cout << "  mov %rax,(%rdi)\n";
+        return;
+    }
     rhs->codegen();
     push();
     lhs->codegen();
@@ -69,7 +82,9 @@ void ifStmt::codegen() {
 }
 
 void codegen(const std::unique_ptr<Stmt>& stmt) {
-    std::cout << std::format("   .global main\nmain:\n");
+    std::cout << "   .global main\nmain:\n";
+    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identifierExpr::var_offset);
     stmt->codegen();
-    std::cout << std::format("  ret\n");
+    std::cout << "  mov %rbp,%rsp\n  pop %rbp\n";
+    std::cout << "  ret\n";
 }
