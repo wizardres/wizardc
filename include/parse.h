@@ -1,6 +1,8 @@
 #ifndef PARSE_H_
 #define PARSE_H_
 
+#include "visitor.h"
+
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -55,6 +57,7 @@ enum class node_t {
 #define is_operator(c) ( c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '<' || c == '>' || c == '!') 
 #define is_semecolon(c) ( c == ';')
 
+
 class Expr {
 public:
     Expr()=default;
@@ -63,48 +66,59 @@ public:
                    charidx(_idx),
                    charlen(_len){}
     virtual ~Expr()=default;
-    virtual void codegen()=0;
+
+    virtual void accept(visitor& vis)=0;
 
     node_t ntype;
     int charidx;
     int charlen;
 };
 
-class numericExpr : public Expr {
+class numericExpr final: public Expr {
 public:
     numericExpr(int _val,int idx,int len):
                     value(_val),
                     Expr(node_t::N_numeric,idx,len){}
     ~numericExpr()=default;
-    void codegen()override;
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
     int value;
 };
 
-class identifierExpr : public Expr {
+class identifierExpr final: public Expr {
 public:
     identifierExpr(int _offset,int idx,int len):
                     offset(_offset),
                     Expr(node_t::N_identifier,idx,len) {}
     ~identifierExpr()=default;
-    void codegen();
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
 
     int offset;
     static inline std::map<std::string_view,int> local_vars; 
     static inline int var_offset{0};
 };
 
-class prefixExpr : public Expr {
+class prefixExpr final: public Expr {
 public:
     prefixExpr(std::unique_ptr<Expr>& _e,token_t _op,int idx,int len)
                 :e(std::move(_e)),
                 op(_op),
                 Expr(node_t::N_prefix,idx,len){}
-    void codegen()override;
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
+
     std::unique_ptr<Expr> e;
     token_t op;
 };
 
-class binaryExpr : public Expr {
+class binaryExpr final: public Expr {
 public:
     binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token_t _op,int idx,int len)
                                     :lhs(std::move(_l)),
@@ -112,9 +126,12 @@ public:
                                      op(_op),
                                      Expr(node_t::N_binary,idx,len) {}
     ~binaryExpr()=default;
-    void codegen()override;
     void push() { std::cout << std::format("  push %rax\n"); }
     void pop(std::string_view reg) { std::cout << std::format("  pop {}\n",reg); }
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
 
     std::unique_ptr<Expr> lhs;
     std::unique_ptr<Expr> rhs;
@@ -125,34 +142,33 @@ class Stmt {
 public:
     Stmt()=default;
     ~Stmt()=default;    
-    virtual void codegen()=0;
+    virtual void accept(visitor& vis)=0;
 };
 
-class exprStmt : public Stmt {
+class exprStmt final: public Stmt {
 public:
     exprStmt(std::unique_ptr<Expr>& _expr):e(std::move(_expr)){};
     ~exprStmt()=default;
-    void codegen()override{
-        e->codegen();
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
     }
     std::unique_ptr<Expr> e;
 };
 
 
-class blockStmt : public Stmt{
+class blockStmt final: public Stmt{
 public:
     blockStmt(std::vector<std::unique_ptr<Stmt>>& _stmts):stmts(std::move(_stmts)){}
     ~blockStmt()=default;
-    void codegen()override{
-        for(auto& stmt : stmts) {
-            stmt->codegen();
-        }
+    void accept(visitor& vis)override{
+        vis.visit(*this);
     }
     std::vector<std::unique_ptr<Stmt>> stmts;
 };
 
 
-class ifStmt : public Stmt{
+class ifStmt final: public Stmt{
 public:
     ifStmt(std::unique_ptr<Expr> &_cond,
            std::unique_ptr<Stmt>& _then,
@@ -161,10 +177,13 @@ public:
                     then(std::move(_then)),
                     elseStmt(std::move(_else)) { }
     ~ifStmt()=default;
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
     std::unique_ptr<Expr> cond;
     std::unique_ptr<Stmt> then;
     std::unique_ptr<Stmt> elseStmt;
-    void codegen()override;
     static inline int level{1};
 };
 

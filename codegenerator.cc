@@ -1,32 +1,43 @@
-#include "include/codegen.h"
+#include "include/codegenerator.h"
 
-void numericExpr::codegen() {
-    std::cout << std::format("  mov ${},%rax\n",value);
+
+codegenerator::codegenerator() {
+    std::string s {"   .global main\nmain:\n"};
+    s += std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identifierExpr::var_offset);
+    std::cout << s;
 }
 
-void prefixExpr::codegen() {
-    e->codegen();
+codegenerator::~codegenerator() {
+    std::cout <<  "  mov %rbp,%rsp\n  pop %rbp\n  ret\n";
+}
+
+void codegenerator::visit(numericExpr& E) {
+    std::cout << std::format("  mov ${},%rax\n",E.value);
+}
+
+void codegenerator::visit(identifierExpr& E) {
+    std::cout << std::format("  mov {}(%rbp),%rax\n",E.offset);
+}
+
+void codegenerator::visit(prefixExpr& E) {
+    E.e->accept(*this);
     std::cout << std::format("  neg %rax\n");
 }
 
-void identifierExpr::codegen() {
-    std::cout << std::format("  mov {}(%rbp),%rax\n",offset);
-}
-
-
-void binaryExpr::codegen() {
+void codegenerator::visit(binaryExpr& E) {
+    token_t op = E.op;
     if(op == token_t::T_assign) {
-        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identifierExpr*>(lhs.get())->offset);
-        push();
-        rhs->codegen();
-        pop("%rdi");
+        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identifierExpr*>(E.lhs.get())->offset);
+        E.push();
+        E.rhs->accept(*this);
+        E.pop("%rdi");
         std::cout << "  mov %rax,(%rdi)\n";
         return;
     }
-    rhs->codegen();
-    push();
-    lhs->codegen();
-    pop("%rdi");
+    E.rhs->accept(*this);
+    E.push();
+    E.lhs->accept(*this);
+    E.pop("%rdi");
     switch(op) {
         case token_t::T_plus: {
             std::cout << std::format("  add %rdi,%rax\n");break;
@@ -64,27 +75,29 @@ void binaryExpr::codegen() {
     }
 }
 
-
-void ifStmt::codegen() {
-    int l = level++;
-    cond->codegen();
+void codegenerator::visit(ifStmt& S) {
+    int l = S.level++;
+    S.cond->accept(*this);
     std::string out;
     std::cout << "  cmp $0,%rax\n";
-    std::string label = elseStmt == nullptr ? std::format(".L.end.{}",l) : std::format(".L.else.{}",l);
+    std::string label = S.elseStmt == nullptr ? std::format(".L.end.{}",l) : std::format(".L.else.{}",l);
     std::cout << std::format("  je {}\n",label);
-    then->codegen();
-    if(elseStmt != nullptr) {
+    S.then->accept(*this);
+    if(S.elseStmt != nullptr) {
         std::cout << std::format("  jmp .L.end.{}\n",l);
         std::cout << std::format(".L.else.{}:\n",l);
-        elseStmt->codegen();
+        S.elseStmt->accept(*this);
     }
     std::cout << std::format(".L.end.{}:\n",l);
 }
 
-void codegen(const std::unique_ptr<Stmt>& stmt) {
-    std::cout << "   .global main\nmain:\n";
-    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identifierExpr::var_offset);
-    stmt->codegen();
-    std::cout << "  mov %rbp,%rsp\n  pop %rbp\n";
-    std::cout << "  ret\n";
+void codegenerator::visit(exprStmt& S) {
+    S.e->accept(*this);
 }
+
+void codegenerator::visit(blockStmt& S) {
+    for(auto& s:S.stmts) {
+        s->accept(*this);
+    }
+}
+
