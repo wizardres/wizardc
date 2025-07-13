@@ -186,7 +186,7 @@ void next_token() {
 
 void token_expected(token_t expected,const char *msg) {
     if(cur_tok != expected) {
-        error_at(prev_start+1,start-prev_start,std::format("{}",msg));
+        error_at(start,cur-start,std::format("{}",msg));
     }
     next_token();
 }
