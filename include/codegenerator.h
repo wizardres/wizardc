@@ -10,11 +10,12 @@ public:
     virtual ~codegenerator();
 
     void visit(numericExpr&)override;
-    void visit(identifierExpr&)override;
+    void visit(identExpr&)override;
     void visit(prefixExpr&)override;
     void visit(binaryExpr&)override;
     void visit(ifStmt&)override;
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;
+    void visit(declStmt&)override;
 };
 #endif

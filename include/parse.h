@@ -37,6 +37,12 @@ enum class token_t {
     T_le,           /* '<='*/
     T_ge,           /* '>='*/
     T_neq,          /* '!='*/
+    T_comma,        /* ',' */
+    T_period,       /* '.' */
+
+    T_if,
+    T_else,
+    T_int,
     T_eof,
 };
 
@@ -56,7 +62,7 @@ enum class node_t {
 #define is_hex_num(c) ( (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') )
 #define is_operator(c) ( c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '<' || c == '>' || c == '!') 
 #define is_semecolon(c) ( c == ';')
-
+#define is_puct(c) ( c == ';' || c == ',' || c == '.' )
 
 class Expr {
 public:
@@ -87,12 +93,12 @@ public:
     int value;
 };
 
-class identifierExpr final: public Expr {
+class identExpr final: public Expr {
 public:
-    identifierExpr(int _offset,int idx,int len):
+    identExpr(int _offset,int idx,int len):
                     offset(_offset),
                     Expr(node_t::N_identifier,idx,len) {}
-    ~identifierExpr()=default;
+    ~identExpr()=default;
 
     void accept(visitor& vis)override{
         vis.visit(*this);
@@ -178,7 +184,7 @@ public:
                     elseStmt(std::move(_else)) { }
     ~ifStmt()=default;
 
-    void accept(visitor& vis)override{
+    void accept(visitor& vis)override {
         vis.visit(*this);
     }
     std::unique_ptr<Expr> cond;
@@ -187,6 +193,16 @@ public:
     static inline int level{1};
 };
 
+class declStmt final : public Stmt {
+public:
+    declStmt(std::vector<std::unique_ptr<Expr>>& _decls):decls(std::move(_decls)) {}
+    ~declStmt()=default;
+
+    void accept(visitor& vis)override {
+        vis.visit(*this);
+    }
+    std::vector<std::unique_ptr<Expr>> decls;
+};
 
 enum class precedence_t {
     P_none,
@@ -208,10 +224,10 @@ std::unique_ptr<Expr> parse_expr(precedence_t );
 
 std::unique_ptr<Stmt> parse_stmt();
 std::unique_ptr<Stmt> if_stmt();
+std::unique_ptr<Stmt> decl_stmt();
 
 using  prefix_call = std::function<std::unique_ptr<Expr>()>;
 using  infix_call = std::function<std::unique_ptr<Expr>(std::unique_ptr<Expr>& )>;
-
 
 std::unique_ptr<Stmt> parse();
 #endif

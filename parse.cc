@@ -9,9 +9,10 @@ int prev_start{0};
 int start{0};
 int cur{0};       
 
-std::unordered_set<std::string_view> keywords = {
-    "if",
-    "else",
+std::unordered_map<std::string_view,token_t> keywords = {
+    { "if",token_t::T_if },
+    { "else",token_t::T_else },
+    { "int",token_t::T_int },
 };
 
 
@@ -103,7 +104,11 @@ token_t token_number(char c) {
 token_t token_identifier(char c) {
     while(is_identifier(peek()) || is_number(peek())) advance();
     tok_str = std::string_view(src+start,src+cur);
-    if(keywords.find(tok_str) != keywords.end()) return token_t::T_keyword;
+
+    auto it = keywords.find(tok_str);
+    if(it != keywords.end()) {
+        return it->second;
+    }
     return token_t::T_identifier;
 }
 
@@ -142,6 +147,14 @@ token_t token_bracket(char c) {
     }
 }
 
+token_t token_puct(char c) {
+    switch(c) {
+        case ',': return token_t::T_comma;
+        case ';': return token_t::T_semicolon;
+        case '.': return token_t::T_period;
+    }
+}
+
 token_t scan_token() {
     skip_blank();
     prev_start = start;
@@ -158,8 +171,8 @@ token_t scan_token() {
         return token_t::T_eof;
     }else if(is_operator(c)){
         return token_operator(c);
-    }else if(is_semicolon(c)){
-        return token_t::T_semicolon;
+    }else if(is_puct(c)){
+        return token_puct(c);
     }else{
         error_at(start,1,std::format("invalid character:'{}'",c));
     }
@@ -216,29 +229,24 @@ infix_call get_infix_call(token_t t) {
 
 
 std::unique_ptr<Expr> parse_numeric() {
-    return std::make_unique<numericExpr>(tok_value,start,cur-start);
+    return std::make_unique<numericExpr>(tok_value,prev_start,start-prev_start);
 }
 
 std::unique_ptr<Expr> parse_ident() {
-    auto &locals = identifierExpr::local_vars;
-    int &cur_offset = identifierExpr::var_offset;
-    int offset;
+    auto &locals = identExpr::local_vars;
+    int &cur_offset = identExpr::var_offset;
 
     auto it = locals.find(tok_str);
     if(it == locals.end()) {
-        cur_offset-=8;
-        locals.insert({tok_str,cur_offset});
-        offset = cur_offset;
-    }else{
-        offset = it->second;
+        error_at(prev_start,start-prev_start,"undefined variable");
     }
-    return std::make_unique<identifierExpr>(offset,start,cur-start);
+    return std::make_unique<identExpr>(it->second,prev_start,cur-start);
 }
 
 std::unique_ptr<Expr> parse_prefix() {
     token_t op = prev_tok;
     std::unique_ptr<Expr> e = parse_expr(precedence_t::P_prefix);
-    return std::make_unique<prefixExpr>(e,op,start,cur-start);
+    return std::make_unique<prefixExpr>(e,op,prev_start,start-prev_start);
 }
 
 std::unique_ptr<Expr> parse_group_expr() {
@@ -251,7 +259,7 @@ std::unique_ptr<Expr> parse_binary_expr(std::unique_ptr<Expr> &lhs) {
     token_t op = prev_tok;
     auto precedence = get_precedence(prev_tok);
     std::unique_ptr<Expr> rhs = parse_expr(precedence);
-    return std::make_unique<binaryExpr>(lhs,rhs,op,start,cur-start);
+    return std::make_unique<binaryExpr>(lhs,rhs,op,prev_start,start-prev_start);
 }
 
 
@@ -275,6 +283,7 @@ std::unique_ptr<Stmt> expr_stmt() {
 }
 
 std::unique_ptr<Stmt> block_stmt() {
+    next_token();
     std::vector<std::unique_ptr<Stmt>> stmts;
     while(cur_tok != token_t::T_eof && cur_tok != token_t::T_close_block) {
         stmts.emplace_back(parse_stmt());
@@ -284,6 +293,7 @@ std::unique_ptr<Stmt> block_stmt() {
 }
 
 std::unique_ptr<Stmt> if_stmt() {
+    next_token();
     token_expected(token_t::T_open_paren,"expect '(' after 'if' ");
     if(cur_tok == token_t::T_close_paren) {
         error_at(prev_start,start-prev_start+1,"condition can't be empty");
@@ -292,7 +302,7 @@ std::unique_ptr<Stmt> if_stmt() {
     token_expected(token_t::T_close_paren,"expect ')' after condition");
     std::unique_ptr<Stmt> _then = parse_stmt();
     std::unique_ptr<Stmt> _else;
-    if(cur_tok == token_t::T_keyword && tok_str == "else") {
+    if(cur_tok == token_t::T_else && tok_str == "else") {
         next_token();
         _else = parse_stmt();
         return std::make_unique<ifStmt>(_cond,_then,_else);
@@ -300,18 +310,55 @@ std::unique_ptr<Stmt> if_stmt() {
     return std::make_unique<ifStmt>(_cond,_then,_else);
 }
 
+std::unique_ptr<Expr> decl_var() {
+    std::string_view str = tok_str;
+    token_expected(token_t::T_identifier,"expect a variable name");
+    identExpr::var_offset -= 8;
+    identExpr::local_vars.insert({str,identExpr::var_offset});
+    return std::make_unique<identExpr>(identExpr::var_offset,prev_start,start-prev_start);
+}
+
+
+std::unique_ptr<Stmt> decl_stmt() {
+    next_token();
+    std::vector<std::unique_ptr<Expr>> decls;
+    int i {0};
+    while(cur_tok != token_t::T_semicolon) {
+        if(i++ > 0) {
+            token_expected(token_t::T_comma,"expect ','");
+        }
+        std::unique_ptr<Expr> var = decl_var();
+        if(cur_tok == token_t::T_assign) {
+            next_token();
+            int tok_start = start,tok_len = cur-start;
+            std::unique_ptr<Expr> value = parse_expr(precedence_t::P_none);
+            std::unique_ptr<binaryExpr> equ = std::make_unique<binaryExpr>(var,value,token_t::T_assign,tok_start,tok_len);
+            decls.emplace_back(std::move(equ));
+        }else if(cur_tok == token_t::T_comma || cur_tok == token_t::T_semicolon) {
+            std::unique_ptr<Expr> value = std::make_unique<numericExpr>(0,prev_start,start-prev_start);
+            std::unique_ptr<binaryExpr> equ = std::make_unique<binaryExpr>(var,value,token_t::T_assign,prev_start,start-prev_start);
+            decls.emplace_back(std::move(equ));
+            if(cur_tok == token_t::T_comma) next_token();
+        }
+    }
+    next_token();
+    return std::make_unique<declStmt>(decls);
+}
 
 std::unique_ptr<Stmt> parse_stmt() {
-    if(cur_tok == token_t::T_open_block) {
-        next_token();
-        return block_stmt();
-    }else if(cur_tok == token_t::T_keyword){
-        if(tok_str == "if") {
-            next_token();
+    switch(cur_tok) {
+        case token_t::T_open_block: {
+            return block_stmt();
+        }
+        case token_t::T_if: {
             return if_stmt();
         }
-    }else {
-        return expr_stmt();
+        case token_t::T_int: {
+            return decl_stmt();
+        }
+        default: {
+            return expr_stmt();
+        }
     }
 }
 

@@ -2,12 +2,13 @@
 #define VISITOR_H_
 
 class numericExpr;
-class identifierExpr;
+class identExpr;
 class prefixExpr;
 class binaryExpr;
 class ifStmt;
 class exprStmt;
 class blockStmt;
+class declStmt;
 
 class visitor {
 public:
@@ -15,12 +16,13 @@ public:
     virtual ~visitor()=default;
 
     virtual void visit(numericExpr&)=0;
-    virtual void visit(identifierExpr&)=0;
+    virtual void visit(identExpr&)=0;
     virtual void visit(prefixExpr&)=0;
     virtual void visit(binaryExpr&)=0;
     virtual void visit(ifStmt&)=0;
     virtual void visit(exprStmt&)=0;
     virtual void visit(blockStmt&)=0;
+    virtual void visit(declStmt&)=0;
 };
 
 #endif

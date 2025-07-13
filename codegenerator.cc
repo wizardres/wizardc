@@ -3,7 +3,7 @@
 
 codegenerator::codegenerator() {
     std::string s {"   .global main\nmain:\n"};
-    s += std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identifierExpr::var_offset);
+    s += std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identExpr::var_offset);
     std::cout << s;
 }
 
@@ -15,7 +15,7 @@ void codegenerator::visit(numericExpr& E) {
     std::cout << std::format("  mov ${},%rax\n",E.value);
 }
 
-void codegenerator::visit(identifierExpr& E) {
+void codegenerator::visit(identExpr& E) {
     std::cout << std::format("  mov {}(%rbp),%rax\n",E.offset);
 }
 
@@ -27,7 +27,7 @@ void codegenerator::visit(prefixExpr& E) {
 void codegenerator::visit(binaryExpr& E) {
     token_t op = E.op;
     if(op == token_t::T_assign) {
-        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identifierExpr*>(E.lhs.get())->offset);
+        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
         E.push();
         E.rhs->accept(*this);
         E.pop("%rdi");
@@ -91,8 +91,15 @@ void codegenerator::visit(ifStmt& S) {
     std::cout << std::format(".L.end.{}:\n",l);
 }
 
+
 void codegenerator::visit(exprStmt& S) {
     S.e->accept(*this);
+}
+
+void codegenerator::visit(declStmt& decl) {
+    for(auto& equ : decl.decls) {
+        equ->accept(*this);
+    }
 }
 
 void codegenerator::visit(blockStmt& S) {
