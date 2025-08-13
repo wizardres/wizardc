@@ -1,8 +1,11 @@
 # this file is basically from chibicc(https://github.com/rui314/chibicc)
 #!/bin/bash
-
+cat<<EOF | g++ -xc -c -o tmp1.o - 
+int ret3() { return 3; }
+int ret5() { return 5; }
+EOF
 afterexit() {
-    rm -f tmp tmp.s
+    rm -f tmp tmp.s tmp1.o
     exit
 }
 assert() {
@@ -47,4 +50,6 @@ assert 14 "{int a=11;a+3;}"
 assert 12 "{int a=5,b=7;a+b;}"
 assert 5 "{int a=5,b=a;b;}"
 assert 3 "{int a=1,b=2;if(a<b) a+b;else a-b;}"
+assert 3 "{ return 3; }"
+assert 5 "{ return 5; }"
 afterexit

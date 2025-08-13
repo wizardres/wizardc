@@ -13,6 +13,7 @@ public:
     void visit(identExpr&)override;
     void visit(prefixExpr&)override;
     void visit(binaryExpr&)override;
+    void visit(funcallExpr&)override;
     void visit(ifStmt&)override;
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;

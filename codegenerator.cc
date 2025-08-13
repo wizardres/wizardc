@@ -24,8 +24,12 @@ void codegenerator::visit(prefixExpr& E) {
     std::cout << std::format("  neg %rax\n");
 }
 
+void codegenerator::visit(funcallExpr& E) {
+    std::cout << std::format("  call {}\n",E.funcname);
+}
+
 void codegenerator::visit(binaryExpr& E) {
-    token_t op = E.op;
+    token_t op = E.tok.type;
     if(op == token_t::T_assign) {
         std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
         E.push();

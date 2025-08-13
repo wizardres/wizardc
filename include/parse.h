@@ -2,6 +2,7 @@
 #define PARSE_H_
 
 #include "visitor.h"
+#include "lexer.h"
 
 #include <iostream>
 #include <string>
@@ -13,78 +14,32 @@
 #include <format>
 #include <vector>
 
-enum class token_t {
-    T_num,
-    T_string,
-    T_identifier,
-    T_keyword,
-    T_plus,
-    T_minus,
-    T_star, // '*'
-    T_div,
-    T_open_paren,   /* '(' */
-    T_close_paren,  /* ')' */
-    T_open_square,   /* '[' */
-    T_close_square,  /* ']' */
-    T_open_block,   /* '{' */
-    T_close_block,  /* '}' */
-    T_semicolon,    /* ';' */
-    T_lt,           /* '<' */
-    T_gt,           /* '>' */
-    T_not,          /* '!' */
-    T_assign,       /* '=' */
-    T_eq,           /* '=='*/
-    T_le,           /* '<='*/
-    T_ge,           /* '>='*/
-    T_neq,          /* '!='*/
-    T_comma,        /* ',' */
-    T_period,       /* '.' */
-
-    T_if,
-    T_else,
-    T_int,
-    T_eof,
-};
 
 enum class node_t {
     N_numeric,
     N_identifier,
     N_prefix,
     N_binary,
+    N_funcall,
 };
-
-#define is_identifier(c) ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')
-#define is_number(c) ( c >= '0' && c <= '9')
-#define is_eof(c) (c == '\0')
-#define is_bracket(c) ( c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' )
-#define is_blank(c) (c == '\n' || c == '\t' || c == '\r' || c == ' ')
-#define is_semicolon(c) (c == ';')
-#define is_hex_num(c) ( (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') )
-#define is_operator(c) ( c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '<' || c == '>' || c == '!') 
-#define is_semecolon(c) ( c == ';')
-#define is_puct(c) ( c == ';' || c == ',' || c == '.' )
 
 class Expr {
 public:
     Expr()=default;
-    Expr(node_t _type,int _idx,int _len):
-                   ntype(_type),
-                   charidx(_idx),
-                   charlen(_len){}
+    Expr(node_t _nt,token _t): ntype(_nt),tok(_t) {}
     virtual ~Expr()=default;
 
     virtual void accept(visitor& vis)=0;
 
     node_t ntype;
-    int charidx;
-    int charlen;
+    token tok;
 };
 
 class numericExpr final: public Expr {
 public:
-    numericExpr(int _val,int idx,int len):
+    numericExpr(int _val,token _t):
                     value(_val),
-                    Expr(node_t::N_numeric,idx,len){}
+                    Expr(node_t::N_numeric,_t){}
     ~numericExpr()=default;
 
     void accept(visitor& vis)override{
@@ -95,9 +50,9 @@ public:
 
 class identExpr final: public Expr {
 public:
-    identExpr(int _offset,int idx,int len):
+    identExpr(int _offset,token _t):
                     offset(_offset),
-                    Expr(node_t::N_identifier,idx,len) {}
+                    Expr(node_t::N_identifier,_t) {}
     ~identExpr()=default;
 
     void accept(visitor& vis)override{
@@ -105,32 +60,29 @@ public:
     }
 
     int offset;
-    static inline std::map<std::string_view,int> local_vars; 
+    static inline std::map<std::string,int> local_vars; 
     static inline int var_offset{0};
 };
 
 class prefixExpr final: public Expr {
 public:
-    prefixExpr(std::unique_ptr<Expr>& _e,token_t _op,int idx,int len)
+    prefixExpr(std::unique_ptr<Expr>& _e,token _t)
                 :e(std::move(_e)),
-                op(_op),
-                Expr(node_t::N_prefix,idx,len){}
+                Expr(node_t::N_prefix,_t){}
 
     void accept(visitor& vis)override{
         vis.visit(*this);
     }
 
     std::unique_ptr<Expr> e;
-    token_t op;
 };
 
 class binaryExpr final: public Expr {
 public:
-    binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token_t _op,int idx,int len)
+    binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token _t)
                                     :lhs(std::move(_l)),
                                      rhs(std::move(_r)),
-                                     op(_op),
-                                     Expr(node_t::N_binary,idx,len) {}
+                                     Expr(node_t::N_binary,_t) {}
     ~binaryExpr()=default;
     void push() { std::cout << std::format("  push %rax\n"); }
     void pop(std::string_view reg) { std::cout << std::format("  pop {}\n",reg); }
@@ -141,7 +93,18 @@ public:
 
     std::unique_ptr<Expr> lhs;
     std::unique_ptr<Expr> rhs;
-    token_t op;
+};
+
+class funcallExpr final : public Expr {
+public:
+    funcallExpr(std::string_view name,token _t)
+        :funcname(name),
+        Expr(node_t::N_funcall,_t) {}
+
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
+    std::string_view funcname;
 };
 
 class Stmt {
@@ -229,5 +192,5 @@ std::unique_ptr<Stmt> decl_stmt();
 using  prefix_call = std::function<std::unique_ptr<Expr>()>;
 using  infix_call = std::function<std::unique_ptr<Expr>(std::unique_ptr<Expr>& )>;
 
-std::unique_ptr<Stmt> parse();
+std::unique_ptr<Stmt> parse(const char *str);
 #endif
