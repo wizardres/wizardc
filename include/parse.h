@@ -13,6 +13,7 @@
 #include <functional>
 #include <format>
 #include <vector>
+#include <array>
 
 
 enum class node_t {
@@ -84,8 +85,6 @@ public:
                                      rhs(std::move(_r)),
                                      Expr(node_t::N_binary,_t) {}
     ~binaryExpr()=default;
-    void push() { std::cout << std::format("  push %rax\n"); }
-    void pop(std::string_view reg) { std::cout << std::format("  pop {}\n",reg); }
 
     void accept(visitor& vis)override{
         vis.visit(*this);
@@ -97,14 +96,16 @@ public:
 
 class funcallExpr final : public Expr {
 public:
-    funcallExpr(std::string_view name,token _t)
+    funcallExpr(std::string_view name,std::vector<std::unique_ptr<Expr>> &_args,token _t)
         :funcname(name),
+        args(std::move(_args)),
         Expr(node_t::N_funcall,_t) {}
 
     void accept(visitor& vis)override{
         vis.visit(*this);
     }
-    std::string_view funcname;
+    std::string funcname;
+    std::vector<std::unique_ptr<Expr>> args;
 };
 
 class Stmt {

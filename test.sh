@@ -1,8 +1,12 @@
 # this file is basically from chibicc(https://github.com/rui314/chibicc)
 #!/bin/bash
-cat<<EOF | g++ -xc -c -o tmp1.o - 
+cat <<EOF | g++ -xc -c -o tmp1.o - 
 int ret3() { return 3; }
 int ret5() { return 5; }
+int addx(int x,int y) { return x+y; }
+int add(int a,int b,int c,int d,int e) {
+    return a+b+c+d+e;
+}
 EOF
 afterexit() {
     rm -f tmp tmp.s tmp1.o
@@ -12,7 +16,7 @@ assert() {
     expected="$1"
     input="$2"
     ./build/wizardc "$input" 2 > tmp.s || afterexit
-    gcc -static -o tmp tmp.s
+    gcc -static -o tmp tmp.s tmp1.o
     ./tmp
     actual="$?"
 
@@ -50,6 +54,9 @@ assert 14 "{int a=11;a+3;}"
 assert 12 "{int a=5,b=7;a+b;}"
 assert 5 "{int a=5,b=a;b;}"
 assert 3 "{int a=1,b=2;if(a<b) a+b;else a-b;}"
-assert 3 "{ return 3; }"
-assert 5 "{ return 5; }"
+assert 7 "{ return ret3() + 4; }"
+assert 8 "{ return ret5() + 3; }"
+assert 5 "{ return addx(3,2); }"
+assert 6 "{ return addx(3,ret3()); }"
+assert 15 "{ return add(1,2,3,4,5); }"
 afterexit

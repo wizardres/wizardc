@@ -18,5 +18,8 @@ public:
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;
     void visit(declStmt&)override;
+
+    void push(std::string_view reg);
+    void pop(std::string_view reg);
 };
 #endif

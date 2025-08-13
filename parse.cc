@@ -87,11 +87,15 @@ void next_token() {
 #endif
 }
 
-void token_expected(token_t expected,const char *msg) {
+void token_expected(token_t expected,std::string_view msg) {
     if(cur_tok.type != expected) {
         lex.error_at(cur_tok.start,cur_tok.str.length(),msg);
     }
     next_token();
+}
+
+bool token_equal(token_t expect) {
+    return cur_tok.type == expect;
 }
 
 precedence_t get_precedence(token_t t) {
@@ -106,9 +110,9 @@ prefix_call get_prefix_call(token_t t) {
     auto it = prefixcalls.find(t);
     if(it == prefixcalls.end()) {
         if(prev_tok.type == token_t::T_eof){
-            lex.error_at(prev_tok.start,prev_tok.str.length(),"expect an prefix expression");
+            lex.error_at(prev_tok.start,prev_tok.str.length(),"expect a expression");
         }else{
-            lex.error_at(prev_tok.start,prev_tok.str.length(),std::format("invalid prefix '{}'",prev_tok.str));
+            lex.error_at(prev_tok.start,prev_tok.str.length(),std::format("invalid '{}'",prev_tok.str));
         }
     }
     return it->second;
@@ -119,9 +123,9 @@ infix_call get_infix_call(token_t t) {
     if(it == infixcalls.end()) {
         std::string msg;
         if(prev_tok.type == token_t::T_eof){
-            lex.error_at(prev_tok.start,prev_tok.str.length(),"expect an infix expression");
+            lex.error_at(prev_tok.start,prev_tok.str.length(),"expect a expression");
         }else{
-            lex.error_at(prev_tok.start,prev_tok.str.length(),std::format("invalid infix '{}'",prev_tok.str));
+            lex.error_at(prev_tok.start,prev_tok.str.length(),std::format("invalid '{}'",prev_tok.str));
         }
     }
     return it->second;
@@ -143,10 +147,20 @@ std::unique_ptr<Expr> identifier() {
 
 
 std::unique_ptr<Expr> funcall() {
-    std::string_view name = prev_tok.str;
+    std::string name = prev_tok.str;
     next_token();
-    token_expected(token_t::T_close_paren,"expect ')' in function-call expresstion");
-    return std::make_unique<funcallExpr>(name,cur_tok);
+    std::vector<std::unique_ptr<Expr>> args;
+    while(!token_equal(token_t::T_close_paren)) {
+        if(args.size() > 0) {
+            if(token_equal(token_t::T_comma)) {
+                next_token();
+            }
+        }
+        args.emplace_back(parse_expr(precedence_t::P_none));
+    }
+
+    next_token();
+    return std::make_unique<funcallExpr>(name,args,cur_tok);
 }
 
 std::unique_ptr<Expr> parse_ident() {

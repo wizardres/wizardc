@@ -1,6 +1,14 @@
 #include "include/codegenerator.h"
 
 
+
+void codegenerator::push(std::string_view reg) {
+    std::cout << "  push %" << reg << "\n";
+}
+void codegenerator::pop(std::string_view reg) {
+    std::cout << "  pop %" << reg << "\n";
+}
+
 codegenerator::codegenerator() {
     std::string s {"   .global main\nmain:\n"};
     s += std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identExpr::var_offset);
@@ -25,6 +33,13 @@ void codegenerator::visit(prefixExpr& E) {
 }
 
 void codegenerator::visit(funcallExpr& E) {
+    std::array<const char *,6> regs{ "rdi","rsi","rdx","rcx","r8","r9" };
+    int nargs = 0;
+    for(auto &arg : E.args) {
+        arg->accept(*this);
+        std::cout << std::format("  mov %rax,%{}\n",regs[nargs]);
+        nargs++;
+    }
     std::cout << std::format("  call {}\n",E.funcname);
 }
 
@@ -32,16 +47,16 @@ void codegenerator::visit(binaryExpr& E) {
     token_t op = E.tok.type;
     if(op == token_t::T_assign) {
         std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
-        E.push();
+        push("rax");
         E.rhs->accept(*this);
-        E.pop("%rdi");
+        pop("rdi");
         std::cout << "  mov %rax,(%rdi)\n";
         return;
     }
     E.rhs->accept(*this);
-    E.push();
+    push("rax");
     E.lhs->accept(*this);
-    E.pop("%rdi");
+    pop("rdi");
     switch(op) {
         case token_t::T_plus: {
             std::cout << std::format("  add %rdi,%rax\n");break;
