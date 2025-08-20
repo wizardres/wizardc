@@ -6,8 +6,8 @@
 
 class codegenerator final: public visitor {
 public:
-    codegenerator();
-    virtual ~codegenerator();
+    codegenerator(){}
+    virtual ~codegenerator(){}
 
     void visit(numericExpr&)override;
     void visit(identExpr&)override;
@@ -17,7 +17,10 @@ public:
     void visit(ifStmt&)override;
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;
-    void visit(declStmt&)override;
+    void visit(retStmt&)override;
+    void visit(vardef&)override;
+    void visit(funcdef&)override;
+    void visit(Prog&)override;
 
     void push(std::string_view reg);
     void pop(std::string_view reg);

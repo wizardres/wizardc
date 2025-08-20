@@ -9,7 +9,10 @@ class ifStmt;
 class funcallExpr;
 class exprStmt;
 class blockStmt;
-class declStmt;
+class retStmt;
+class vardef;
+class funcdef;
+class Prog;
 
 class visitor {
 public:
@@ -24,7 +27,10 @@ public:
     virtual void visit(ifStmt&)=0;
     virtual void visit(exprStmt&)=0;
     virtual void visit(blockStmt&)=0;
-    virtual void visit(declStmt&)=0;
+    virtual void visit(retStmt&)=0;
+    virtual void visit(vardef&)=0;
+    virtual void visit(funcdef&)=0;
+    virtual void visit(Prog&)=0;
 };
 
 #endif

@@ -4,8 +4,12 @@
 #include "include/lexer.h"
 
 int main(int argc,char *argv[]) {
-    std::unique_ptr<Stmt> stmt = parse(argv[1]);
+    if(argc < 2){
+        std::cerr << "usage:./wizardc [input]";
+        exit(-1);
+    }
+    Prog prog = parse(argv[1]);
     codegenerator gen;
-    stmt->accept(gen);
+    prog.accept(gen);
     return 0;
 }

@@ -75,14 +75,18 @@ token lexer::operator_sign() {
         case '>': type = cc == '=' ? token_t::T_ge : token_t::T_gt;break;
         case '=': type = cc == '=' ? token_t::T_eq : token_t::T_assign;break;
         case '!': type = cc == '=' ? token_t::T_neq : token_t::T_not;break;
+        default:{
+            std::cerr << "invalid arithmetic operator:" << cc << "\n";
+            exit(-1);
+        }
     }
     advance();
     switch(type) {
         case token_t::T_le:
         case token_t::T_ge:
         case token_t::T_eq:
-        case token_t::T_neq:
-        advance();
+        case token_t::T_neq: advance();
+        default:break;
     }
     return token(0,start,src.substr(start,cur-start),type);
 }
@@ -135,9 +139,13 @@ token lexer::newToken() {
         return puct();
     }else{
         error_at(start,1,std::format("unrecongenized character:{}",peek()));
+        exit(-1);
     }
 }
 
+void lexer::back(int start) {
+    cur = start;
+}
 
 void lexer::advance() {
     cur++;

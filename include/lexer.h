@@ -55,7 +55,7 @@ enum class token_t {
 
 struct token {
     token()=default;
-    token(int value,int st,std::string_view s,token_t t):start(st),val(value),str(s),type(t){}
+    token(int value,int st,std::string_view s,token_t t):val(value),start(st),str(s),type(t){}
     int val;
     int start;
     std::string str;
@@ -81,6 +81,7 @@ public:
     token eof();
 
     void error_at(int start,int hintlen,std::string_view errmsg);
+    void back(int start);
 private:
     token scan();
 

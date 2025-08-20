@@ -9,16 +9,6 @@ void codegenerator::pop(std::string_view reg) {
     std::cout << "  pop %" << reg << "\n";
 }
 
-codegenerator::codegenerator() {
-    std::string s {"   .global main\nmain:\n"};
-    s += std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",-identExpr::var_offset);
-    std::cout << s;
-}
-
-codegenerator::~codegenerator() {
-    std::cout <<  "  mov %rbp,%rsp\n  pop %rbp\n  ret\n";
-}
-
 void codegenerator::visit(numericExpr& E) {
     std::cout << std::format("  mov ${},%rax\n",E.value);
 }
@@ -46,11 +36,13 @@ void codegenerator::visit(funcallExpr& E) {
 void codegenerator::visit(binaryExpr& E) {
     token_t op = E.tok.type;
     if(op == token_t::T_assign) {
-        std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
-        push("rax");
-        E.rhs->accept(*this);
-        pop("rdi");
-        std::cout << "  mov %rax,(%rdi)\n";
+        if(E.rhs != nullptr) {
+            std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
+            push("rax");
+            E.rhs->accept(*this);
+            pop("rdi");
+            std::cout << "  mov %rax,(%rdi)\n";
+        }
         return;
     }
     E.rhs->accept(*this);
@@ -68,7 +60,7 @@ void codegenerator::visit(binaryExpr& E) {
             std::cout << std::format("  imul %rdi,%rax\n");break;
         }
         case token_t::T_div: {
-            std::cout << std::format("  cqo\n  idiv %rdi\n");
+            std::cout << std::format("  cqo\n  idiv %rdi\n");break;
         }
         case token_t::T_lt:
         case token_t::T_le:
@@ -91,6 +83,10 @@ void codegenerator::visit(binaryExpr& E) {
              std::cout << std::format("  setne %al\n");
          std::cout << std::format("  movzb %al,%rax\n");
          return;
+        default:{
+            std::cerr << "invalid arithmetic operator:::" << E.tok.str << "\n";
+            exit(-1);
+        }
     }
 }
 
@@ -111,19 +107,38 @@ void codegenerator::visit(ifStmt& S) {
 }
 
 
+void codegenerator::visit(retStmt& S) {
+    S.e->accept(*this);
+    std::cout << std::format("  jmp .L.{}.ret\n",retStmt::fname);
+}
+
 void codegenerator::visit(exprStmt& S) {
     S.e->accept(*this);
 }
 
-void codegenerator::visit(declStmt& decl) {
+void codegenerator::visit(vardef& decl) {
     for(auto& equ : decl.decls) {
         equ->accept(*this);
     }
 }
 
+void codegenerator::visit(funcdef& f) {
+    std::cout << std::format("  .global {}\n{}:\n",f.name,f.name);
+    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",f.stacksize);
+    retStmt::fname = f.name;
+    f.body->accept(*this);
+    std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",f.name);
+}
+
 void codegenerator::visit(blockStmt& S) {
     for(auto& s:S.stmts) {
         s->accept(*this);
+    }
+}
+
+void codegenerator::visit(Prog& p) {
+    for(auto &stmt : p.stmts) {
+        stmt->accept(*this);
     }
 }
 

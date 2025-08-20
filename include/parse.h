@@ -3,6 +3,7 @@
 
 #include "visitor.h"
 #include "lexer.h"
+#include "scope.h"
 
 #include <iostream>
 #include <string>
@@ -39,8 +40,7 @@ public:
 class numericExpr final: public Expr {
 public:
     numericExpr(int _val,token _t):
-                    value(_val),
-                    Expr(node_t::N_numeric,_t){}
+                    Expr(node_t::N_numeric,_t),value(_val) {}
     ~numericExpr()=default;
 
     void accept(visitor& vis)override{
@@ -52,8 +52,7 @@ public:
 class identExpr final: public Expr {
 public:
     identExpr(int _offset,token _t):
-                    offset(_offset),
-                    Expr(node_t::N_identifier,_t) {}
+                    Expr(node_t::N_identifier,_t),offset(_offset) {}
     ~identExpr()=default;
 
     void accept(visitor& vis)override{
@@ -61,15 +60,12 @@ public:
     }
 
     int offset;
-    static inline std::map<std::string,int> local_vars; 
-    static inline int var_offset{0};
 };
 
 class prefixExpr final: public Expr {
 public:
     prefixExpr(std::unique_ptr<Expr>& _e,token _t)
-                :e(std::move(_e)),
-                Expr(node_t::N_prefix,_t){}
+                :Expr(node_t::N_prefix,_t),e(std::move(_e)) {}
 
     void accept(visitor& vis)override{
         vis.visit(*this);
@@ -81,9 +77,9 @@ public:
 class binaryExpr final: public Expr {
 public:
     binaryExpr(std::unique_ptr<Expr> &_l,std::unique_ptr<Expr> &_r,token _t)
-                                    :lhs(std::move(_l)),
-                                     rhs(std::move(_r)),
-                                     Expr(node_t::N_binary,_t) {}
+                                    :Expr(node_t::N_binary,_t),
+                                     lhs(std::move(_l)),
+                                     rhs(std::move(_r)) {}
     ~binaryExpr()=default;
 
     void accept(visitor& vis)override{
@@ -97,9 +93,9 @@ public:
 class funcallExpr final : public Expr {
 public:
     funcallExpr(std::string_view name,std::vector<std::unique_ptr<Expr>> &_args,token _t)
-        :funcname(name),
-        args(std::move(_args)),
-        Expr(node_t::N_funcall,_t) {}
+        :Expr(node_t::N_funcall,_t),
+         funcname(name),
+         args(std::move(_args)) {}
 
     void accept(visitor& vis)override{
         vis.visit(*this);
@@ -117,7 +113,7 @@ public:
 
 class exprStmt final: public Stmt {
 public:
-    exprStmt(std::unique_ptr<Expr>& _expr):e(std::move(_expr)){};
+    exprStmt(std::unique_ptr<Expr>& _expr):e(std::move(_expr)){}
     ~exprStmt()=default;
 
     void accept(visitor& vis)override{
@@ -137,6 +133,15 @@ public:
     std::vector<std::unique_ptr<Stmt>> stmts;
 };
 
+class retStmt final : public Stmt {
+public:
+    retStmt(std::unique_ptr<Stmt>&_e):e(std::move(_e)) {}
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
+    std::unique_ptr<Stmt> e;
+    static inline std::string fname;
+};
 
 class ifStmt final: public Stmt{
 public:
@@ -157,15 +162,39 @@ public:
     static inline int level{1};
 };
 
-class declStmt final : public Stmt {
+class vardef final : public Stmt {
 public:
-    declStmt(std::vector<std::unique_ptr<Expr>>& _decls):decls(std::move(_decls)) {}
-    ~declStmt()=default;
+    vardef(std::vector<std::unique_ptr<Expr>>& _decls):decls(std::move(_decls)) {}
+    ~vardef()=default;
 
     void accept(visitor& vis)override {
         vis.visit(*this);
     }
     std::vector<std::unique_ptr<Expr>> decls;
+};
+
+class funcdef final : public Stmt {
+public:
+    funcdef( std::unique_ptr<Stmt>& _b,std::string _n):
+                    body(std::move(_b)),
+                    name(std::move(_n)){}
+    void accept(visitor& vis)override{
+        vis.visit(*this);
+    }
+    std::unique_ptr<Stmt> body;
+    std::string name;
+    static inline int stacksize{0};
+};
+
+
+class Prog {
+public:
+    Prog()=default;
+    Prog(std::vector<std::unique_ptr<Stmt>> &p):stmts(std::move(p)){}
+    void accept(visitor& vis){
+        vis.visit(*this);
+    }
+    std::vector<std::unique_ptr<Stmt>> stmts;
 };
 
 enum class precedence_t {
@@ -193,5 +222,5 @@ std::unique_ptr<Stmt> decl_stmt();
 using  prefix_call = std::function<std::unique_ptr<Expr>()>;
 using  infix_call = std::function<std::unique_ptr<Expr>(std::unique_ptr<Expr>& )>;
 
-std::unique_ptr<Stmt> parse(const char *str);
+Prog parse(const char *str);
 #endif
