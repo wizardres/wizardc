@@ -175,14 +175,18 @@ public:
 
 class funcdef final : public Stmt {
 public:
-    funcdef( std::unique_ptr<Stmt>& _b,std::string _n):
+    funcdef( std::unique_ptr<Stmt>& _b,const std::string& _n,std::vector<std::unique_ptr<Expr>> &_params,int _stackoff):
                     body(std::move(_b)),
-                    name(std::move(_n)){}
+                    name(std::move(_n)),
+                    params(std::move(_params)),
+                    stackoff(_stackoff) {}
     void accept(visitor& vis)override{
         vis.visit(*this);
     }
     std::unique_ptr<Stmt> body;
     std::string name;
+    std::vector<std::unique_ptr<Expr>> params;
+    int stackoff;
     static inline int stacksize{0};
 };
 

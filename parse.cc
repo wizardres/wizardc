@@ -291,7 +291,6 @@ std::unique_ptr<Stmt> decl_var() {
 
 
 std::unique_ptr<Stmt> block_stmt() {
-    scope.enter();
     next_token();
     std::vector<std::unique_ptr<Stmt>> stmts;
     while(!token_equal(token_t::T_eof) && !token_equal(token_t::T_close_block)) {
@@ -302,7 +301,6 @@ std::unique_ptr<Stmt> block_stmt() {
         }
     }
     token_skip(token_t::T_close_block,"expect '}'");
-    scope.leave();
     return std::make_unique<blockStmt>(stmts);
 }
 
@@ -313,21 +311,32 @@ std::unique_ptr<Stmt> ret_stmt() {
 }
 
 std::unique_ptr<Stmt> parse_stmt() {
-    switch(cur.type) {
-        case token_t::T_open_block: {
-            return block_stmt();
-        }
-        case token_t::T_if: {
-            return if_stmt();
-        }
-        case token_t::T_return: {
-            return ret_stmt();
-        }
-        default: {
-            return expr_stmt();
-        }
-    }
+    if(cur.type == token_t::T_open_block){
+        scope.enter();
+        std::unique_ptr<Stmt> s = block_stmt();
+        scope.leave();
+        return s;
+    } 
+    if(cur.type == token_t::T_if) return if_stmt();
+    if(cur.type == token_t::T_return) return ret_stmt();
+    return expr_stmt();
 }
+
+
+std::vector<std::unique_ptr<Expr>> params() {
+    int i = 0;
+    std::vector<std::unique_ptr<Expr>> params;
+    while(!token_equal(token_t::T_close_paren)) {
+        if(i++ > 0) {
+            token_skip(token_t::T_comma,"expect ','");
+        }
+        token_skip(token_t::T_int,"expect 'int'");
+        token_expect(token_t::T_identifier,"expect an identifier");
+        params.push_back(_var());
+    }
+    return params;
+}
+
 
 std::unique_ptr<Stmt> declaration() {
     token_skip(token_t::T_int,"expect 'int'");
@@ -335,10 +344,18 @@ std::unique_ptr<Stmt> declaration() {
     std::string name = cur.str;
     next_token();
     token_skip(token_t::T_open_paren,"expect '('");
+    scope.enter();
+    std::vector<std::unique_ptr<Expr>> _params;
+    if(!token_equal(token_t::T_close_paren)) {
+        _params = params();
+    }
     token_skip(token_t::T_close_paren,"expect ')'");
     token_expect(token_t::T_open_block,"expect '{' ");
     std::unique_ptr<Stmt> body = block_stmt();
-    return std::make_unique<funcdef>(body,name);
+    scope.leave();
+    std::unique_ptr<funcdef> func = std::make_unique<funcdef>(body,name,_params,funcdef::stacksize);
+    funcdef::stacksize = 0;
+    return func;
 }
 
 

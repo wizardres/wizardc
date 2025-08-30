@@ -62,4 +62,6 @@ assert 15 "int main(){ return add(1,2,3,4,5); }"
 assert 8 "int ret7() { return 7;} int main(){ return 1+ret7(); }"
 assert 7 "int main(){int a=6;if(1>0){int a = 4,b=3;return a+b;} return a;}"
 assert 1 "int main(){if(1>0) return 1; return 6;}"
+assert 6 "int ret2(int a,int b) { return a + b;} int main() { int c = 3;return c + ret2(1,2); }"
+assert 7 "int ret2(int a,int b) { return a + b;} int main() { int a = 1,b = 2; return a + b + ret2(1,ret2(1,2)); }"
 afterexit

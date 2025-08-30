@@ -23,12 +23,15 @@ void codegenerator::visit(prefixExpr& E) {
 }
 
 void codegenerator::visit(funcallExpr& E) {
-    std::array<const char *,6> regs{ "rdi","rsi","rdx","rcx","r8","r9" };
+    std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     int nargs = 0;
     for(auto &arg : E.args) {
         arg->accept(*this);
-        std::cout << std::format("  mov %rax,%{}\n",regs[nargs]);
+        std::cout << "  push %rax\n";
         nargs++;
+    }
+    for(int i = nargs-1; i >= 0; i--) {
+        std::cout << std::format("  pop {}\n",regs[i]);
     }
     std::cout << std::format("  call {}\n",E.funcname);
 }
@@ -124,8 +127,12 @@ void codegenerator::visit(vardef& decl) {
 
 void codegenerator::visit(funcdef& f) {
     std::cout << std::format("  .global {}\n{}:\n",f.name,f.name);
-    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",f.stacksize);
+    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",f.stackoff);
     retStmt::fname = f.name;
+    std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
+    for(size_t i = 0; i < f.params.size(); i++) {
+        std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identExpr*>(f.params[i].get())->offset);
+    }
     f.body->accept(*this);
     std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",f.name);
 }
