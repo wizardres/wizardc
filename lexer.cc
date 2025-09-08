@@ -111,6 +111,7 @@ token lexer::puct() {
         case ',': type = token_t::T_comma;break;
         case ';': type = token_t::T_semicolon;break;
         case '.': type = token_t::T_period;break;
+        case '&': type = token_t::T_addr;break;
     }
     advance();
     return token(0,start,src.substr(start,1),type);
@@ -145,6 +146,11 @@ token lexer::newToken() {
 
 void lexer::back(int start) {
     cur = start;
+}
+
+bool lexer::iskeyword(std::string& name) {
+    auto it = keywords.find(name);
+    return it != keywords.end();
 }
 
 void lexer::advance() {

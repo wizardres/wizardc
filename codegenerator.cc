@@ -10,22 +10,27 @@ void codegenerator::pop(std::string_view reg) {
 }
 
 void codegenerator::visit(numericExpr& E) {
-    std::cout << std::format("  mov ${},%rax\n",E.value);
+    std::cout << std::format("  mov ${},%rax\n",E.Value());
 }
 
 void codegenerator::visit(identExpr& E) {
-    std::cout << std::format("  mov {}(%rbp),%rax\n",E.offset);
+    if(E.isGlobal()) {
+        std::cout << std::format("  lea {}(%rip),%rax\n  mov (%rax),%rax\n",E.getName());
+    }else{
+        std::cout << std::format("  mov {}(%rbp),%rax\n",E.getOffset());
+    }
 }
 
 void codegenerator::visit(prefixExpr& E) {
-    E.e->accept(*this);
+    E.getExpr()->accept(*this);
     std::cout << std::format("  neg %rax\n");
 }
 
 void codegenerator::visit(funcallExpr& E) {
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     int nargs = 0;
-    for(auto &arg : E.args) {
+    auto &args = E.getArgs();
+    for(auto &arg : args) {
         arg->accept(*this);
         std::cout << "  push %rax\n";
         nargs++;
@@ -33,24 +38,30 @@ void codegenerator::visit(funcallExpr& E) {
     for(int i = nargs-1; i >= 0; i--) {
         std::cout << std::format("  pop {}\n",regs[i]);
     }
-    std::cout << std::format("  call {}\n",E.funcname);
+    std::cout << std::format("  call {}\n",E.getName());
 }
 
 void codegenerator::visit(binaryExpr& E) {
-    token_t op = E.tok.type;
+    token_t op = E.getOp();
+    auto &lhs = E.getLhs();
+    auto &rhs = E.getRhs();
     if(op == token_t::T_assign) {
-        if(E.rhs != nullptr) {
-            std::cout << std::format("  lea {}(%rbp),%rax\n",static_cast<identExpr*>(E.lhs.get())->offset);
+        if(rhs != nullptr) {
+            auto ident = static_cast<identExpr*>(lhs.get());
+            if(ident->isGlobal())  
+                std::cout << std::format("  lea {}(%rip),%rax\n",ident->getName());
+            else
+                std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
             push("rax");
-            E.rhs->accept(*this);
+            rhs->accept(*this);
             pop("rdi");
             std::cout << "  mov %rax,(%rdi)\n";
         }
         return;
     }
-    E.rhs->accept(*this);
+    rhs->accept(*this);
     push("rax");
-    E.lhs->accept(*this);
+    lhs->accept(*this);
     pop("rdi");
     switch(op) {
         case token_t::T_plus: {
@@ -85,66 +96,80 @@ void codegenerator::visit(binaryExpr& E) {
          else if(op == token_t::T_neq)
              std::cout << std::format("  setne %al\n");
          std::cout << std::format("  movzb %al,%rax\n");
-         return;
-        default:{
-            std::cerr << "invalid arithmetic operator:::" << E.tok.str << "\n";
-            exit(-1);
-        }
+        default: return;
     }
 }
 
 void codegenerator::visit(ifStmt& S) {
-    int l = S.level++;
-    S.cond->accept(*this);
-    std::string out;
+    int l = S.levelUp();
+    auto &cond = S.getCond();
+    auto &then = S.getThen();
+    auto &elseStmt = S.getElse();
+    cond->accept(*this);
     std::cout << "  cmp $0,%rax\n";
-    std::string label = S.elseStmt == nullptr ? std::format(".L.end.{}",l) : std::format(".L.else.{}",l);
+    std::string label = elseStmt == nullptr ? std::format(".L.end.{}",l) : std::format(".L.else.{}",l);
     std::cout << std::format("  je {}\n",label);
-    S.then->accept(*this);
-    if(S.elseStmt != nullptr) {
+    then->accept(*this);
+    if(elseStmt != nullptr) {
         std::cout << std::format("  jmp .L.end.{}\n",l);
         std::cout << std::format(".L.else.{}:\n",l);
-        S.elseStmt->accept(*this);
+        elseStmt->accept(*this);
     }
     std::cout << std::format(".L.end.{}:\n",l);
 }
 
 
 void codegenerator::visit(retStmt& S) {
-    S.e->accept(*this);
-    std::cout << std::format("  jmp .L.{}.ret\n",retStmt::fname);
+    S.getStmt()->accept(*this);
+    std::cout << std::format("  jmp .L.{}.ret\n",retStmt::getName());
 }
 
 void codegenerator::visit(exprStmt& S) {
-    S.e->accept(*this);
+    S.getExpr()->accept(*this);
 }
 
-void codegenerator::visit(vardef& decl) {
-    for(auto& equ : decl.decls) {
-        equ->accept(*this);
+void codegenerator::visit(vardef& vars) {
+    auto &decls = vars.getDeclas();
+    if(vars.isGlobal()) {
+        for(auto &var : decls) {
+            auto ident = static_cast<identExpr*>(var.get());
+            std::cout << std::format("  .globl {}\n  .data\n",ident->getName());
+            std::cout << std::format("{}:\n  .zero {}\n",ident->getName(),ident->typeSize());
+        }
+    }
+    else{
+        for(auto &var : decls) {
+            var->accept(*this);
+        }
     }
 }
 
 void codegenerator::visit(funcdef& f) {
-    std::cout << std::format("  .global {}\n{}:\n",f.name,f.name);
-    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",f.stackoff);
-    retStmt::fname = f.name;
+    auto name = f.getName();
+    int stackoff = f.getStackOff();
+    auto &params = f.getParams();
+    auto &body = f.getBody();
+
+    std::cout << std::format("  .globl {}\n  .text\n{}:\n",name,name);
+    std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",stackoff);
+    retStmt::setFuncName(name);
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
-    for(size_t i = 0; i < f.params.size(); i++) {
-        std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identExpr*>(f.params[i].get())->offset);
+    for(size_t i = 0; i < params.size(); i++) {
+        std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identExpr*>(params[i].get())->getOffset());
     }
-    f.body->accept(*this);
-    std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",f.name);
+    body->accept(*this);
+    std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",name);
 }
 
 void codegenerator::visit(blockStmt& S) {
-    for(auto& s:S.stmts) {
+    auto &stmts = S.getStmts();
+    for(auto& s: stmts) {
         s->accept(*this);
     }
 }
 
 void codegenerator::visit(Prog& p) {
-    for(auto &stmt : p.stmts) {
+    for(auto &stmt : p._stmts) {
         stmt->accept(*this);
     }
 }

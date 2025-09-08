@@ -1,22 +1,14 @@
 # this file is basically from chibicc(https://github.com/rui314/chibicc)
 #!/bin/bash
-cat <<EOF | g++ -xc -c -o tmp1.o - 
-int ret3() { return 3; }
-int ret5() { return 5; }
-int addx(int x,int y) { return x+y; }
-int add(int a,int b,int c,int d,int e) {
-    return a+b+c+d+e;
-}
-EOF
 afterexit() {
-    rm -f tmp tmp.s tmp1.o
+    rm -f tmp tmp.s
     exit
 }
 assert() {
     expected="$1"
     input="$2"
     ./build/wizardc "$input" 2 > tmp.s || afterexit
-    gcc -static -o tmp tmp.s tmp1.o
+    gcc -static -o tmp tmp.s
     ./tmp
     actual="$?"
 
@@ -54,14 +46,15 @@ assert 14 "int main() {int a=11;return a+3; }"
 assert 12 "int main() {int a=5,b=7;return a+b;}"
 assert 5 "int main() {int a=5,b=a;return b;}"
 assert 3 "int main() {int a=1,b=2;if(a<b) return a+b;else return a-b;}"
-assert 7 "int main(){ return ret3() + 4; }"
-assert 8 "int main(){ return ret5() + 3; }"
-assert 5 "int main(){ return addx(3,2); }"
-assert 6 "int main(){ return addx(3,ret3()); }"
-assert 15 "int main(){ return add(1,2,3,4,5); }"
-assert 8 "int ret7() { return 7;} int main(){ return 1+ret7(); }"
+assert 7 "int ret3() { return 3;} int main(){ return ret3() + 4; }"
+assert 8 "int ret5() { return 5;}int main(){ return ret5() + 3; }"
+assert 5 "int addx(int a,int b) { return a+b;} int main(){ return addx(3,2); }"
+assert 6 "int ret3(){return 3;} int addx(int a,int b) { return a+b;} int main(){ return addx(3,ret3()); }"
+assert 15 "int add(int a,int b,int c,int d,int e) { return a+b+c+d+e;} int main(){ return add(1,2,3,4,5); }"
 assert 7 "int main(){int a=6;if(1>0){int a = 4,b=3;return a+b;} return a;}"
-assert 1 "int main(){if(1>0) return 1; return 6;}"
 assert 6 "int ret2(int a,int b) { return a + b;} int main() { int c = 3;return c + ret2(1,2); }"
 assert 7 "int ret2(int a,int b) { return a + b;} int main() { int a = 1,b = 2; return a + b + ret2(1,ret2(1,2)); }"
+assert 2 "int ret(int a) { if(a == 0) return 0; else return 1 + ret(a-1); } int main() { return ret(2); }"
+assert 10 "int i,j;int ret() { i = 3;j = 4;return i+j;} int main() { int i = 1,j = 2; return i + j + ret(); }"
+assert 4 "int i,j; int ret() { i = 2;j = 4; if(i > j) return i;else return j;} int main() { return ret(); }"
 afterexit

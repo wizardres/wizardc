@@ -33,6 +33,8 @@ enum class token_t {
     T_neq,          /* '!='*/
     T_comma,        /* ',' */
     T_period,       /* '.' */
+    T_addr,         /* '&' */
+    T_bit_and,
 
     T_if,
     T_else,
@@ -50,7 +52,7 @@ enum class token_t {
 #define is_semicolon(c) (c == ';')
 #define is_hex_num(c) ( (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || is_number(c) )
 #define is_operator(c) ( c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '<' || c == '>' || c == '!') 
-#define is_puct(c) ( c == ';' || c == ',' || c == '.' )
+#define is_puct(c) ( c == ';' || c == ',' || c == '.' || c == '&' )
 
 
 struct token {
@@ -79,9 +81,10 @@ public:
     token bracket();
     token puct();
     token eof();
+    bool iskeyword(std::string& name);
+    void back(int start);
 
     void error_at(int start,int hintlen,std::string_view errmsg);
-    void back(int start);
 private:
     token scan();
 
