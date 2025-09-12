@@ -75,10 +75,10 @@ public:
 class symbol {
 public:
     symbol()=default;
-    void insert(std::string& name,std::shared_ptr<Obj> obj) {
+    void insert(std::string_view name,std::shared_ptr<Obj> obj) {
         objs.insert({name,obj});
     }
-    std::optional<std::shared_ptr<Obj>> lookup(std::string& name) {
+    std::optional<std::shared_ptr<Obj>> lookup(std::string_view name) {
         auto it = objs.find(name);
         if(it != objs.end()) {
             return it->second;
@@ -86,7 +86,7 @@ public:
         return std::nullopt;
     }
 private:
-    std::unordered_map<std::string,std::shared_ptr<Obj>> objs;
+    std::unordered_map<std::string_view,std::shared_ptr<Obj>> objs;
 };
 
 
@@ -104,19 +104,19 @@ public:
         return cur == -1;
     }
 
-    bool insert_local(std::string& name,const std::shared_ptr<Obj> obj) {
+    bool insert_local(std::string_view name,const std::shared_ptr<Obj> obj) {
         if(lookup_curscope(name).has_value()) return false;
         localVars[cur].insert(name,obj);
         return true;
     }
 
-    bool insert_global(std::string& name,const std::shared_ptr<Obj> obj) {
+    bool insert_global(std::string_view name,const std::shared_ptr<Obj> obj) {
         if(globalVars.lookup(name).has_value()) return false;
         globalVars.insert(name,obj);
         return true;
     }
 
-    std::optional<std::shared_ptr<Obj>> lookup_allscope(std::string& name){
+    std::optional<std::shared_ptr<Obj>> lookup_allscope(std::string_view name){
         for(int i = cur; i >= 0; i--){
             symbol& s = localVars[i];
             auto it = s.lookup(name);
@@ -126,11 +126,11 @@ public:
         }
         return lookup_global(name);
     }
-    std::optional<std::shared_ptr<Obj>> lookup_global(std::string& name) {
+    std::optional<std::shared_ptr<Obj>> lookup_global(std::string_view name) {
         return globalVars.lookup(name);
     }
 
-    std::optional<std::shared_ptr<Obj>> lookup_curscope(std::string& name) {
+    std::optional<std::shared_ptr<Obj>> lookup_curscope(std::string_view name) {
         return localVars[cur].lookup(name);
     }
 private:

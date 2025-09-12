@@ -5,6 +5,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include "lexer.h"
 class Type {
 public:
     enum class Kind { T_int,T_ptr,T_func };
@@ -13,7 +14,12 @@ public:
 
     virtual Kind getType()const=0;
     virtual size_t getSize()const=0;
+
+    static bool isPointer(const std::shared_ptr<Type> type){ return type->getType() == Kind::T_ptr; }
+    static bool isInteger(const std::shared_ptr<Type> type){ return type->getType() == Kind::T_int; }
+    static bool areCompatible(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs) { return true;}
 };
+
 
 class baseType final : public Type {
 public:
@@ -24,7 +30,6 @@ public:
 private:
     int _size;
     Kind _kind;
-    size_t _align;
 };
 
 class pointerType final: public Type {
@@ -46,6 +51,8 @@ public:
         _paramTypes(std::move(param)){}
     Kind getType()const override { return Kind::T_func; }
     size_t getSize()const override { return 0; }
+    std::shared_ptr<Type> getRetType() { return _retType; }
+    const std::vector<std::shared_ptr<Type>> &getParamTypes()const { return _paramTypes; }
 private:
     std::shared_ptr<Type> _retType;
     std::vector<std::shared_ptr<Type>> _paramTypes;
@@ -61,14 +68,7 @@ public:
     }
 
     static std::shared_ptr<Type> getPointerType(std::shared_ptr<Type> base) {
-        std::map<Type*,std::weak_ptr<Type>> basetypes;
-        auto ptr = basetypes.find(base.get());
-        if(ptr != basetypes.end()) {
-            return ptr->second.lock();
-        }
-        std::shared_ptr<pointerType> ptrType = std::make_shared<pointerType>(base);
-        basetypes.insert({base.get(),ptrType});
-        return ptrType;
+        return std::make_shared<pointerType>(base);
     }
 
     static std::shared_ptr<Type> getFuncType(
@@ -76,5 +76,60 @@ public:
             std::vector<std::shared_ptr<Type>> &params) {
                 return std::make_shared<funcType>(ret,params);
     }
+};
+
+class typeChecker {
+public:
+    static bool checkEqual(const std::shared_ptr<Type>& type,Type::Kind kind) {
+        return type->getType() == kind;
+    }
+    static bool checkEqual(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs) {
+        if(isPointer(lhs) && isPointer(rhs)){
+            auto lbase = static_cast<pointerType*>(lhs.get())->getBaseType();
+            auto rbase = static_cast<pointerType*>(rhs.get())->getBaseType();
+            return checkEqual(lbase,rbase); 
+        }
+        else {
+            lhs->getType() == rhs->getType();
+        }
+    }
+
+    static std::shared_ptr<Type> checkBinaryOp(
+        token_t op,
+        const std::shared_ptr<Type>& lhs,
+        const std::shared_ptr<Type>& rhs);
+private:
+    static bool isPointer(const std::shared_ptr<Type>& type) {
+        return type && type->getType() == Type::Kind::T_ptr;
+    }
+    static bool isInteger(const std::shared_ptr<Type>& type) {
+        return type && type->getType() == Type::Kind::T_int;
+    }
+};
+
+
+class pointerTypeCheck {
+public:
+    static std::shared_ptr<Type> checkBinaryOp(
+        token_t op,
+        const std::shared_ptr<Type>& lhs,
+        const std::shared_ptr<Type>& rhs);
+    
+    static std::shared_ptr<Type> checkAddtion(
+        const std::shared_ptr<Type>& lhs,
+        const std::shared_ptr<Type>& rhs);
+
+    static std::shared_ptr<Type> checkSubtraction(
+        const std::shared_ptr<Type>& lhs,
+        const std::shared_ptr<Type>& rhs);
+};
+
+class integerTypeCheck {
+public:
+    static std::shared_ptr<Type> checkBinaryOp(
+        const std::shared_ptr<Type>& lhs,
+        const std::shared_ptr<Type>& rhs){
+            return lhs->getSize() > rhs->getSize() ? lhs : rhs;
+        }
 };
 #endif

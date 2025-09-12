@@ -22,8 +22,17 @@ void codegenerator::visit(identExpr& E) {
 }
 
 void codegenerator::visit(prefixExpr& E) {
-    E.getExpr()->accept(*this);
-    std::cout << std::format("  neg %rax\n");
+    Expr::Kind kind = E.getKind();
+    if(kind == Expr::Kind::N_addr) {
+        auto ident = static_cast<identExpr*>(E.getExpr().get());
+        std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
+    }else if(kind == Expr::Kind::N_deref) {
+        E.getExpr()->accept(*this);
+        std::cout << "  mov (%rax),%rax\n";
+    }else {
+        E.getExpr()->accept(*this);
+        std::cout << std::format("  neg %rax\n");
+    }
 }
 
 void codegenerator::visit(funcallExpr& E) {
@@ -41,17 +50,28 @@ void codegenerator::visit(funcallExpr& E) {
     std::cout << std::format("  call {}\n",E.getName());
 }
 
+void codegenerator::gen_addr(const std::unique_ptr<Expr>& expr) {
+    if(expr->getKind() == Expr::Kind::N_identifier) {
+        auto ident = static_cast<identExpr*>(expr.get());
+        if(ident->isGlobal())  
+            std::cout << std::format("  lea {}(%rip),%rax\n",ident->getName());
+        else
+            std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
+    }
+    else {
+        auto prefix = static_cast<prefixExpr*>(expr.get());
+        prefix->accept(*this);
+    }
+}
+
+
 void codegenerator::visit(binaryExpr& E) {
     token_t op = E.getOp();
     auto &lhs = E.getLhs();
     auto &rhs = E.getRhs();
     if(op == token_t::T_assign) {
         if(rhs != nullptr) {
-            auto ident = static_cast<identExpr*>(lhs.get());
-            if(ident->isGlobal())  
-                std::cout << std::format("  lea {}(%rip),%rax\n",ident->getName());
-            else
-                std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
+            gen_addr(lhs);
             push("rax");
             rhs->accept(*this);
             pop("rdi");

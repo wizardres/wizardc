@@ -57,12 +57,13 @@ enum class token_t {
 
 struct token {
     token()=default;
-    token(int value,int st,const std::string& s,token_t t):val(value),start(st),str(s),type(t){}
+    token(int value,int st,std::string_view s,token_t t):val(value),start(st),str(s),type(t){}
     int val;
     int start;
-    std::string str;
+    std::string_view str;
     token_t type;
 };
+
 
 class lexer {
 public:
@@ -81,15 +82,15 @@ public:
     token bracket();
     token puct();
     token eof();
-    bool iskeyword(std::string& name);
+    bool iskeyword(std::string_view name);
     void back(int start);
 
     void error_at(int start,int hintlen,std::string_view errmsg);
 private:
     token scan();
 
-    int start{0};
-    int cur{0};
+    size_t start{0};
+    size_t cur{0};
     std::string src;
 };
 #endif

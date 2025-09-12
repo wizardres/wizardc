@@ -57,4 +57,8 @@ assert 7 "int ret2(int a,int b) { return a + b;} int main() { int a = 1,b = 2; r
 assert 2 "int ret(int a) { if(a == 0) return 0; else return 1 + ret(a-1); } int main() { return ret(2); }"
 assert 10 "int i,j;int ret() { i = 3;j = 4;return i+j;} int main() { int i = 1,j = 2; return i + j + ret(); }"
 assert 4 "int i,j; int ret() { i = 2;j = 4; if(i > j) return i;else return j;} int main() { return ret(); }"
+assert 4 "int main() { int i = 4; return *(&i); }"
+assert 4 "int main() { int i = 4; int *p = &i; return *p; }"
+assert 4 "int main() { int i = 4; int *p = &i; int **q = &p; return **q; }"
+assert 7 "int *ret() { int i = 3; return &i; } int main() { int i = 4; int *p = ret(); return i + *p; }"
 afterexit

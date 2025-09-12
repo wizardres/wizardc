@@ -17,13 +17,12 @@ token lexer::identifier() {
     while(is_identifier(peek()) || is_number(peek())) advance();
     
     token_t type = token_t::T_identifier;
-    int len = cur-start;
-    std::string s{src.substr(start,len)};
-    auto it = keywords.find(s);
+    std::string_view str{src.data()+start,cur-start};
+    auto it = keywords.find(str);
     if(it != keywords.end()) {
         type = it->second;
     }
-    return token(0,start,s,type);
+    return token(0,start,str,type);
 }
 
 token lexer::number() {
@@ -60,7 +59,7 @@ token lexer::number() {
             error_at(start1,cur-start1,std::format("invalid suffix '{}' on integer constant",src.substr(start1,cur-start1)));
         }
     }
-    return token(num,start,src.substr(start,cur-start),token_t::T_num);
+    return token(num,start,std::string_view(src.data()+start,cur-start),token_t::T_num);
 }
 
 token lexer::operator_sign() {
@@ -88,7 +87,7 @@ token lexer::operator_sign() {
         case token_t::T_neq: advance();
         default:break;
     }
-    return token(0,start,src.substr(start,cur-start),type);
+    return token(0,start,std::string_view(src.data()+start,cur-start),type);
 }
 
 token lexer::bracket() {
@@ -102,7 +101,7 @@ token lexer::bracket() {
         case ']': type = token_t::T_close_square;break;
     }
     advance();
-    return token(0,start,src.substr(start,cur-start),type);
+    return token(0,start,std::string_view(src.data()+start,cur-start),type);
 }
 
 token lexer::puct() {
@@ -114,11 +113,11 @@ token lexer::puct() {
         case '&': type = token_t::T_addr;break;
     }
     advance();
-    return token(0,start,src.substr(start,1),type);
+    return token(0,start,std::string_view(src.data()+start,1),type);
 }
 
 token lexer::eof() {
-    return token(0,start," ",token_t::T_eof);
+    return token(0,start,std::string_view(src.data()+start,1),token_t::T_eof);
 }
 
 token lexer::newToken() {
@@ -148,7 +147,7 @@ void lexer::back(int start) {
     cur = start;
 }
 
-bool lexer::iskeyword(std::string& name) {
+bool lexer::iskeyword(std::string_view name) {
     auto it = keywords.find(name);
     return it != keywords.end();
 }
