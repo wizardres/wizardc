@@ -17,6 +17,7 @@ assert() {
         echo "$input => $actual OK" 
     else 
         echo "$input => $expected expected ,but got $actual"  
+        afterexit
     fi
 }
 
@@ -58,7 +59,21 @@ assert 2 "int ret(int a) { if(a == 0) return 0; else return 1 + ret(a-1); } int 
 assert 10 "int i,j;int ret() { i = 3;j = 4;return i+j;} int main() { int i = 1,j = 2; return i + j + ret(); }"
 assert 4 "int i,j; int ret() { i = 2;j = 4; if(i > j) return i;else return j;} int main() { return ret(); }"
 assert 4 "int main() { int i = 4; return *(&i); }"
-assert 4 "int main() { int i = 4; int *p = &i; return *p; }"
+assert 3 "int i;int main() { i = 3;return *(&i); }"
+assert 9 "int main() { int i = 4,*p = &i;*p = 7; return *p + 2; }"
+assert 4 "int a;int main() { a = 1;int *p = &a; *p = 4; return *p; }"
+assert 6 "int a;int main() { int a = 1,*p = &a; *p = 4; return a + 2; }"
 assert 4 "int main() { int i = 4; int *p = &i; int **q = &p; return **q; }"
 assert 7 "int *ret() { int i = 3; return &i; } int main() { int i = 4; int *p = ret(); return i + *p; }"
+assert 14 "int main() { int arr[2] = {1,2};arr[0] = 12;return arr[0] + arr[1];}"
+assert 1 "int main() { int arr[2] = {1,2},i; i = arr[0]; return i;}"
+assert 12 "int arr[2];int main() { arr[0] = 12;return arr[0];}"
+assert 12 "int arr[2];int main() { int *p = arr;*p = 12;return arr[0];}"
+assert 12 "int arr[2];int main() { int *p = &arr;*p = 12;return arr[0];}"
+assert 12 "int main() { int arr[2] = {1,2},*p = arr;*p = 12;return arr[0];}"
+assert 12 "int main() { int arr[2] = {1,2+1},*p = &arr[1];*p = 12;return arr[1];}"
+assert 5 "int ret5() { return 5;} int main() { int arr[1];arr[0] = ret5(); return arr[0];}"
+assert 5 "int ret5(int *arr) { *arr = 5; return *arr; } int main() { int arr[2];return ret5(&arr[1]);}"
+assert 3 "int main() { int i = 3,*arr[1] = {&i}; return *arr[0]; }"
+echo "OK"
 afterexit

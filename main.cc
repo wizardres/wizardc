@@ -8,7 +8,8 @@ int main(int argc,char *argv[]) {
         std::cerr << "usage:./wizardc [input]";
         exit(-1);
     }
-    Prog prog = parse(argv[1]);
+    Parser parser(argv[1]);
+    Prog prog = parser.start();
     codegenerator gen;
     prog.accept(gen);
     return 0;

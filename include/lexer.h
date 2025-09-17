@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <map>
 
-enum class token_t {
+enum class tokenType {
     T_num,
     T_string,
     T_identifier,
@@ -57,11 +57,15 @@ enum class token_t {
 
 struct token {
     token()=default;
-    token(int value,int st,std::string_view s,token_t t):val(value),start(st),str(s),type(t){}
+    token(int value,int st,std::string_view s,tokenType t):
+          val(value),
+          start(st),
+          str(s),
+          type(t){}
     int val;
     int start;
     std::string_view str;
-    token_t type;
+    tokenType type;
 };
 
 
@@ -83,7 +87,6 @@ public:
     token puct();
     token eof();
     bool iskeyword(std::string_view name);
-    void back(int start);
 
     void error_at(int start,int hintlen,std::string_view errmsg);
 private:

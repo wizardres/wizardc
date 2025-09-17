@@ -1,10 +1,10 @@
 #include "./include/lexer.h"
 
-std::unordered_map<std::string_view,token_t> keywords = {
-    { "if",token_t::T_if },
-    { "else",token_t::T_else },
-    { "int",token_t::T_int },
-    { "return",token_t::T_return },
+std::unordered_map<std::string_view,tokenType> keywords = {
+    { "if",tokenType::T_if },
+    { "else",tokenType::T_else },
+    { "int",tokenType::T_int },
+    { "return",tokenType::T_return },
 };
 
 void lexer::error_at(int start,int hintlen,std::string_view errmsg) {
@@ -16,7 +16,7 @@ void lexer::error_at(int start,int hintlen,std::string_view errmsg) {
 token lexer::identifier() {
     while(is_identifier(peek()) || is_number(peek())) advance();
     
-    token_t type = token_t::T_identifier;
+    tokenType type = tokenType::T_identifier;
     std::string_view str{src.data()+start,cur-start};
     auto it = keywords.find(str);
     if(it != keywords.end()) {
@@ -59,21 +59,21 @@ token lexer::number() {
             error_at(start1,cur-start1,std::format("invalid suffix '{}' on integer constant",src.substr(start1,cur-start1)));
         }
     }
-    return token(num,start,std::string_view(src.data()+start,cur-start),token_t::T_num);
+    return token(num,start,std::string_view(src.data()+start,cur-start),tokenType::T_num);
 }
 
 token lexer::operator_sign() {
     char cc = peeknext();
-    token_t type;
+    tokenType type;
     switch(peek()) {
-        case '+': type = token_t::T_plus;break;
-        case '-': type = token_t::T_minus;break;
-        case '*': type = token_t::T_star;break;
-        case '/': type = token_t::T_div;break;
-        case '<': type = cc == '=' ? token_t::T_le : token_t::T_lt;break;
-        case '>': type = cc == '=' ? token_t::T_ge : token_t::T_gt;break;
-        case '=': type = cc == '=' ? token_t::T_eq : token_t::T_assign;break;
-        case '!': type = cc == '=' ? token_t::T_neq : token_t::T_not;break;
+        case '+': type = tokenType::T_plus;break;
+        case '-': type = tokenType::T_minus;break;
+        case '*': type = tokenType::T_star;break;
+        case '/': type = tokenType::T_div;break;
+        case '<': type = cc == '=' ? tokenType::T_le : tokenType::T_lt;break;
+        case '>': type = cc == '=' ? tokenType::T_ge : tokenType::T_gt;break;
+        case '=': type = cc == '=' ? tokenType::T_eq : tokenType::T_assign;break;
+        case '!': type = cc == '=' ? tokenType::T_neq : tokenType::T_not;break;
         default:{
             std::cerr << "invalid arithmetic operator:" << cc << "\n";
             exit(-1);
@@ -81,43 +81,43 @@ token lexer::operator_sign() {
     }
     advance();
     switch(type) {
-        case token_t::T_le:
-        case token_t::T_ge:
-        case token_t::T_eq:
-        case token_t::T_neq: advance();
+        case tokenType::T_le:
+        case tokenType::T_ge:
+        case tokenType::T_eq:
+        case tokenType::T_neq: advance();
         default:break;
     }
     return token(0,start,std::string_view(src.data()+start,cur-start),type);
 }
 
 token lexer::bracket() {
-    token_t type;
+    tokenType type;
     switch(peek()) {
-        case '(': type = token_t::T_open_paren;break;
-        case ')': type = token_t::T_close_paren;break;
-        case '{': type = token_t::T_open_block;break;
-        case '}': type = token_t::T_close_block;break;
-        case '[': type = token_t::T_open_square;break;
-        case ']': type = token_t::T_close_square;break;
+        case '(': type = tokenType::T_open_paren;break;
+        case ')': type = tokenType::T_close_paren;break;
+        case '{': type = tokenType::T_open_block;break;
+        case '}': type = tokenType::T_close_block;break;
+        case '[': type = tokenType::T_open_square;break;
+        case ']': type = tokenType::T_close_square;break;
     }
     advance();
     return token(0,start,std::string_view(src.data()+start,cur-start),type);
 }
 
 token lexer::puct() {
-    token_t type;
+    tokenType type;
     switch(peek()) {
-        case ',': type = token_t::T_comma;break;
-        case ';': type = token_t::T_semicolon;break;
-        case '.': type = token_t::T_period;break;
-        case '&': type = token_t::T_addr;break;
+        case ',': type = tokenType::T_comma;break;
+        case ';': type = tokenType::T_semicolon;break;
+        case '.': type = tokenType::T_period;break;
+        case '&': type = tokenType::T_addr;break;
     }
     advance();
     return token(0,start,std::string_view(src.data()+start,1),type);
 }
 
 token lexer::eof() {
-    return token(0,start,std::string_view(src.data()+start,1),token_t::T_eof);
+    return token(0,start,std::string_view(src.data()+start,1),tokenType::T_eof);
 }
 
 token lexer::newToken() {
@@ -143,9 +143,6 @@ token lexer::newToken() {
     }
 }
 
-void lexer::back(int start) {
-    cur = start;
-}
 
 bool lexer::iskeyword(std::string_view name) {
     auto it = keywords.find(name);
@@ -153,8 +150,9 @@ bool lexer::iskeyword(std::string_view name) {
 }
 
 void lexer::advance() {
-    cur++;
+    if(cur < src.size()) cur++;
 }
+
 
 char lexer::peek() {
     return src[cur];

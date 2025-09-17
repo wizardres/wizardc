@@ -9,33 +9,39 @@ void codegenerator::pop(std::string_view reg) {
     std::cout << "  pop %" << reg << "\n";
 }
 
-void codegenerator::visit(numericExpr& E) {
+void codegenerator::visit(numericNode& E) {
     std::cout << std::format("  mov ${},%rax\n",E.Value());
 }
 
-void codegenerator::visit(identExpr& E) {
+void codegenerator::visit(identNode& E) {
     if(E.isGlobal()) {
-        std::cout << std::format("  lea {}(%rip),%rax\n  mov (%rax),%rax\n",E.getName());
+        if(Type::isArray(E.getType()))
+            std::cout << std::format("  lea {}(%rip),%rax\n",E.getName());
+        else
+            std::cout << std::format("  lea {}(%rip),%rax\n  mov (%rax),%rax\n",E.getName());
     }else{
-        std::cout << std::format("  mov {}(%rbp),%rax\n",E.getOffset());
+        if(Type::isArray(E.getType()))
+            std::cout << std::format("  lea {}(%rbp),%rax\n",E.getOffset());
+        else
+            std::cout << std::format("  mov {}(%rbp),%rax\n",E.getOffset());
     }
 }
 
-void codegenerator::visit(prefixExpr& E) {
-    Expr::Kind kind = E.getKind();
-    if(kind == Expr::Kind::N_addr) {
-        auto ident = static_cast<identExpr*>(E.getExpr().get());
-        std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
-    }else if(kind == Expr::Kind::N_deref) {
-        E.getExpr()->accept(*this);
+void codegenerator::visit(prefixNode& E) {
+    Node::Kind kind = E.getKind();
+    if(kind == Node::Kind::N_addr) {
+        gen_addr(E.getNode());
+    }else if(kind == Node::Kind::N_deref) {
+        E.getNode()->accept(*this);
         std::cout << "  mov (%rax),%rax\n";
     }else {
-        E.getExpr()->accept(*this);
+        E.getNode()->accept(*this);
         std::cout << std::format("  neg %rax\n");
     }
 }
 
-void codegenerator::visit(funcallExpr& E) {
+
+void codegenerator::visit(funcallNode& E) {
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     int nargs = 0;
     auto &args = E.getArgs();
@@ -50,26 +56,35 @@ void codegenerator::visit(funcallExpr& E) {
     std::cout << std::format("  call {}\n",E.getName());
 }
 
-void codegenerator::gen_addr(const std::unique_ptr<Expr>& expr) {
-    if(expr->getKind() == Expr::Kind::N_identifier) {
-        auto ident = static_cast<identExpr*>(expr.get());
+
+void codegenerator::gen_addr(const std::unique_ptr<Node>& expr) {
+    if(Node::ndEqual(expr,Node::Kind::N_identifier)) {
+        auto ident = static_cast<identNode*>(expr.get());
         if(ident->isGlobal())  
             std::cout << std::format("  lea {}(%rip),%rax\n",ident->getName());
         else
             std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
+    }else if(Node::ndEqual(expr,Node::Kind::N_arrayvisit)) {
+        auto arr = static_cast<arrayVisit*>(expr.get());
+        if(arr->isGlobal()) {
+            std::cout << std::format("  lea {} + {}(%rip),%rax\n",arr->elemOffset(),arr->getName());
+        }else {
+            std::cout << std::format("  lea {}(%rbp),%rax\n",arr->elemOffset() + arr->arrOffset());
+        }
     }
-    else {
-        auto prefix = static_cast<prefixExpr*>(expr.get());
-        prefix->accept(*this);
+    else if(Node::ndEqual(expr,Node::Kind::N_deref)){
+        auto prefix = static_cast<prefixNode*>(expr.get());
+        gen_addr(prefix->getNode());
+        std::cout << "  mov (%rax),%rax\n";
     }
 }
 
 
-void codegenerator::visit(binaryExpr& E) {
-    token_t op = E.getOp();
+void codegenerator::visit(binaryNode& E) {
+    tokenType op = E.getOp();
     auto &lhs = E.getLhs();
     auto &rhs = E.getRhs();
-    if(op == token_t::T_assign) {
+    if(op == tokenType::T_assign) {
         if(rhs != nullptr) {
             gen_addr(lhs);
             push("rax");
@@ -84,36 +99,36 @@ void codegenerator::visit(binaryExpr& E) {
     lhs->accept(*this);
     pop("rdi");
     switch(op) {
-        case token_t::T_plus: {
+        case tokenType::T_plus: {
             std::cout << std::format("  add %rdi,%rax\n");break;
         }
-        case token_t::T_minus: {
+        case tokenType::T_minus: {
             std::cout << std::format("  sub %rdi,%rax\n");break;
         }
-        case token_t::T_star: {
+        case tokenType::T_star: {
             std::cout << std::format("  imul %rdi,%rax\n");break;
         }
-        case token_t::T_div: {
+        case tokenType::T_div: {
             std::cout << std::format("  cqo\n  idiv %rdi\n");break;
         }
-        case token_t::T_lt:
-        case token_t::T_le:
-        case token_t::T_gt:
-        case token_t::T_ge:
-        case token_t::T_eq:
-        case token_t::T_neq:
+        case tokenType::T_lt:
+        case tokenType::T_le:
+        case tokenType::T_gt:
+        case tokenType::T_ge:
+        case tokenType::T_eq:
+        case tokenType::T_neq:
          std::cout << std::format("  cmp %rdi,%rax\n");
-         if(op == token_t::T_lt)
+         if(op == tokenType::T_lt)
              std::cout << std::format("  setl %al\n");
-         else if(op == token_t::T_le)
+         else if(op == tokenType::T_le)
              std::cout << std::format("  setle %al\n");
-         else if(op == token_t::T_gt)
+         else if(op == tokenType::T_gt)
              std::cout << std::format("  setg %al\n");
-         else if(op == token_t::T_ge)
+         else if(op == tokenType::T_ge)
              std::cout << std::format("  setge %al\n");
-         else if(op == token_t::T_eq)
+         else if(op == tokenType::T_eq)
              std::cout << std::format("  sete %al\n");
-         else if(op == token_t::T_neq)
+         else if(op == tokenType::T_neq)
              std::cout << std::format("  setne %al\n");
          std::cout << std::format("  movzb %al,%rax\n");
         default: return;
@@ -145,24 +160,58 @@ void codegenerator::visit(retStmt& S) {
 }
 
 void codegenerator::visit(exprStmt& S) {
-    S.getExpr()->accept(*this);
+    S.getNode()->accept(*this);
 }
+
+
+void codegenerator::visit(arraydef& def) {
+    int offset = def.getOffset();
+    int size = def.elemSize();
+    const auto &init_lst = def.get_init_lst();
+    for(const auto& init : init_lst) {
+        init->accept(*this);
+        std::cout << std::format("  mov %rax,{}(%rbp)\n",offset);
+        offset += size;
+    }
+}
+
+
+void codegenerator::visit(arrayVisit& v) {
+    if(v.isGlobal()) {
+        std::cout << std::format("  lea {} + {}(%rip),%rax\n  mov (%rax),%rax\n",v.elemOffset(),v.getName());
+    }else{
+        std::cout << std::format("  lea {}(%rbp),%rax\n",v.elemOffset() + v.arrOffset());
+        std::cout << std::format("  mov (%rax),%rax\n");
+    }
+}
+
 
 void codegenerator::visit(vardef& vars) {
     auto &decls = vars.getDeclas();
     if(vars.isGlobal()) {
         for(auto &var : decls) {
-            auto ident = static_cast<identExpr*>(var.get());
-            std::cout << std::format("  .globl {}\n  .data\n",ident->getName());
-            std::cout << std::format("{}:\n  .zero {}\n",ident->getName(),ident->typeSize());
+            if(Node::ndEqual(var,Node::Kind::N_identifier)){
+                auto ident = static_cast<identNode*>(var.get());
+                std::cout << std::format("  .globl {}\n  .data\n",ident->getName());
+                std::cout << std::format("{}:\n  .zero {}\n",ident->getName(),ident->typeSize());
+            }else if(Node::ndEqual(var,Node::Kind::N_arraydef)) {
+                auto arr = static_cast<arraydef*>(var.get());
+                std::cout << std::format("  .globl {}\n  .data\n",arr->getName());
+                std::cout << std::format("{}:\n  .zero {}\n",arr->getName(),arr->typeSize());
+            }else {
+                return;
+            }
         }
     }
     else{
         for(auto &var : decls) {
-            var->accept(*this);
+            if(Node::ndEqual(var,Node::Kind::N_binary) || Node::ndEqual(var,Node::Kind::N_arraydef)) {
+                var->accept(*this);
+            }
         }
     }
 }
+
 
 void codegenerator::visit(funcdef& f) {
     auto name = f.getName();
@@ -175,7 +224,7 @@ void codegenerator::visit(funcdef& f) {
     retStmt::setFuncName(name);
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     for(size_t i = 0; i < params.size(); i++) {
-        std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identExpr*>(params[i].get())->getOffset());
+        std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identNode*>(params[i].get())->getOffset());
     }
     body->accept(*this);
     std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",name);

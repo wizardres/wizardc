@@ -9,11 +9,13 @@ public:
     codegenerator(){}
     virtual ~codegenerator(){}
 
-    void visit(numericExpr&)override;
-    void visit(identExpr&)override;
-    void visit(prefixExpr&)override;
-    void visit(binaryExpr&)override;
-    void visit(funcallExpr&)override;
+    void visit(numericNode&)override;
+    void visit(identNode&)override;
+    void visit(prefixNode&)override;
+    void visit(binaryNode&)override;
+    void visit(funcallNode&)override;
+    void visit(arrayVisit&)override;
+    void visit(arraydef&)override;
     void visit(ifStmt&)override;
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;
@@ -24,6 +26,6 @@ public:
 
     void push(std::string_view reg);
     void pop(std::string_view reg);
-    void gen_addr(const std::unique_ptr<Expr>& ident);
+    void gen_addr(const std::unique_ptr<Node>& ident);
 };
 #endif
