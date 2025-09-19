@@ -26,6 +26,6 @@ public:
 
     void push(std::string_view reg);
     void pop(std::string_view reg);
-    void gen_addr(const std::unique_ptr<Node>& ident);
+    void gen_addr(Node& ident);
 };
 #endif

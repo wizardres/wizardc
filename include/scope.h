@@ -88,7 +88,8 @@ public:
             _tok(tok),
             _type(type) {}
 
-    std::shared_ptr<Type> getType()const override{ return static_cast<funcType*>(_type.get())->getRetType(); }
+    std::shared_ptr<Type> getType()const override{ return _type; }
+    std::shared_ptr<Type> getRetType()const{ return static_cast<funcType*>(_type.get())->getRetType(); }
     const std::vector<std::shared_ptr<Type>> &getParamTypes()const { return static_cast<funcType*>(_type.get())->getParamTypes(); }
     size_t getObjSize()const override { return _type->getSize(); }
 

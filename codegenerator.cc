@@ -9,42 +9,34 @@ void codegenerator::pop(std::string_view reg) {
     std::cout << "  pop %" << reg << "\n";
 }
 
-void codegenerator::visit(numericNode& E) {
-    std::cout << std::format("  mov ${},%rax\n",E.Value());
+void codegenerator::visit(numericNode& node) {
+    std::cout << std::format("  mov ${},%rax\n",node.Value());
 }
 
-void codegenerator::visit(identNode& E) {
-    if(E.isGlobal()) {
-        if(Type::isArray(E.getType()))
-            std::cout << std::format("  lea {}(%rip),%rax\n",E.getName());
-        else
-            std::cout << std::format("  lea {}(%rip),%rax\n  mov (%rax),%rax\n",E.getName());
-    }else{
-        if(Type::isArray(E.getType()))
-            std::cout << std::format("  lea {}(%rbp),%rax\n",E.getOffset());
-        else
-            std::cout << std::format("  mov {}(%rbp),%rax\n",E.getOffset());
-    }
+void codegenerator::visit(identNode& node) {
+    gen_addr(node);
+    if(!Type::isArray(node.getType()))
+        std::cout << "  mov (%rax),%rax\n";
 }
 
-void codegenerator::visit(prefixNode& E) {
-    Node::Kind kind = E.getKind();
-    if(kind == Node::Kind::N_addr) {
-        gen_addr(E.getNode());
-    }else if(kind == Node::Kind::N_deref) {
-        E.getNode()->accept(*this);
+
+void codegenerator::visit(prefixNode& node) {
+    if(node.equal(Node::Kind::N_addr)) {
+        gen_addr(*node.getNode());
+    }else if(node.equal(Node::Kind::N_deref)) {
+        node.getNode()->accept(*this);
         std::cout << "  mov (%rax),%rax\n";
     }else {
-        E.getNode()->accept(*this);
+        node.getNode()->accept(*this);
         std::cout << std::format("  neg %rax\n");
     }
 }
 
 
-void codegenerator::visit(funcallNode& E) {
+void codegenerator::visit(funcallNode& node) {
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     int nargs = 0;
-    auto &args = E.getArgs();
+    auto &args = node.getArgs();
     for(auto &arg : args) {
         arg->accept(*this);
         std::cout << "  push %rax\n";
@@ -53,40 +45,40 @@ void codegenerator::visit(funcallNode& E) {
     for(int i = nargs-1; i >= 0; i--) {
         std::cout << std::format("  pop {}\n",regs[i]);
     }
-    std::cout << std::format("  call {}\n",E.getName());
+    std::cout << std::format("  call {}\n",node.getName());
 }
 
 
-void codegenerator::gen_addr(const std::unique_ptr<Node>& expr) {
-    if(Node::ndEqual(expr,Node::Kind::N_identifier)) {
-        auto ident = static_cast<identNode*>(expr.get());
-        if(ident->isGlobal())  
-            std::cout << std::format("  lea {}(%rip),%rax\n",ident->getName());
+void codegenerator::gen_addr(Node& node) {
+    if(node.equal(Node::Kind::N_identifier)) {
+        auto ident = dynamic_cast<identNode&>(node);
+        if(ident.isGlobal())  
+            std::cout << std::format("  lea {}(%rip),%rax\n",ident.getName());
         else
-            std::cout << std::format("  lea {}(%rbp),%rax\n",ident->getOffset());
-    }else if(Node::ndEqual(expr,Node::Kind::N_arrayvisit)) {
-        auto arr = static_cast<arrayVisit*>(expr.get());
-        if(arr->isGlobal()) {
-            std::cout << std::format("  lea {} + {}(%rip),%rax\n",arr->elemOffset(),arr->getName());
+            std::cout << std::format("  lea {}(%rbp),%rax\n",ident.getOffset());
+    }else if(node.equal(Node::Kind::N_arrayvisit)) {
+        auto arr = dynamic_cast<arrayVisit&>(node);
+        if(arr.isGlobal()) {
+            std::cout << std::format("  lea {} + {}(%rip),%rax\n",arr.elemOffset(),arr.getName());
         }else {
-            std::cout << std::format("  lea {}(%rbp),%rax\n",arr->elemOffset() + arr->arrOffset());
+            std::cout << std::format("  lea {}(%rbp),%rax\n",arr.elemOffset() + arr.arrOffset());
         }
     }
-    else if(Node::ndEqual(expr,Node::Kind::N_deref)){
-        auto prefix = static_cast<prefixNode*>(expr.get());
-        gen_addr(prefix->getNode());
-        std::cout << "  mov (%rax),%rax\n";
+    else if(node.equal(Node::Kind::N_deref)){
+        auto prefix = dynamic_cast<prefixNode&>(node);
+        prefix.getNode()->accept(*this);
     }
 }
 
 
-void codegenerator::visit(binaryNode& E) {
-    tokenType op = E.getOp();
-    auto &lhs = E.getLhs();
-    auto &rhs = E.getRhs();
+
+void codegenerator::visit(binaryNode& node) {
+    tokenType op = node.getOp();
+    auto lhs = node.getLhs();
+    auto rhs = node.getRhs();
     if(op == tokenType::T_assign) {
         if(rhs != nullptr) {
-            gen_addr(lhs);
+            gen_addr(*lhs);
             push("rax");
             rhs->accept(*this);
             pop("rdi");
@@ -134,6 +126,7 @@ void codegenerator::visit(binaryNode& E) {
         default: return;
     }
 }
+
 
 void codegenerator::visit(ifStmt& S) {
     int l = S.levelUp();
@@ -190,11 +183,11 @@ void codegenerator::visit(vardef& vars) {
     auto &decls = vars.getDeclas();
     if(vars.isGlobal()) {
         for(auto &var : decls) {
-            if(Node::ndEqual(var,Node::Kind::N_identifier)){
+            if(var->equal(Node::Kind::N_identifier)){
                 auto ident = static_cast<identNode*>(var.get());
                 std::cout << std::format("  .globl {}\n  .data\n",ident->getName());
                 std::cout << std::format("{}:\n  .zero {}\n",ident->getName(),ident->typeSize());
-            }else if(Node::ndEqual(var,Node::Kind::N_arraydef)) {
+            }else if(var->equal(Node::Kind::N_arraydef)) {
                 auto arr = static_cast<arraydef*>(var.get());
                 std::cout << std::format("  .globl {}\n  .data\n",arr->getName());
                 std::cout << std::format("{}:\n  .zero {}\n",arr->getName(),arr->typeSize());
@@ -205,7 +198,7 @@ void codegenerator::visit(vardef& vars) {
     }
     else{
         for(auto &var : decls) {
-            if(Node::ndEqual(var,Node::Kind::N_binary) || Node::ndEqual(var,Node::Kind::N_arraydef)) {
+            if(var->equal(Node::Kind::N_binary) || var->equal(Node::Kind::N_arraydef)) {
                 var->accept(*this);
             }
         }
@@ -219,9 +212,9 @@ void codegenerator::visit(funcdef& f) {
     auto &params = f.getParams();
     auto &body = f.getBody();
 
+    retStmt::setFuncName(name);
     std::cout << std::format("  .globl {}\n  .text\n{}:\n",name,name);
     std::cout << std::format("  push %rbp\n  mov %rsp,%rbp\n  sub ${},%rsp\n",stackoff);
-    retStmt::setFuncName(name);
     std::array<const char *,6> regs{ "%rdi","%rsi","%rdx","%rcx","%r8","%r9" };
     for(size_t i = 0; i < params.size(); i++) {
         std::cout << std::format("  mov {},{}(%rbp)\n",regs[i],static_cast<identNode*>(params[i].get())->getOffset());
@@ -229,6 +222,7 @@ void codegenerator::visit(funcdef& f) {
     body->accept(*this);
     std::cout <<  std::format(".L.{}.ret:\n  mov %rbp,%rsp\n  pop %rbp\n  ret\n",name);
 }
+
 
 void codegenerator::visit(blockStmt& S) {
     auto &stmts = S.getStmts();

@@ -35,34 +35,36 @@ public:
     Parser(const char *src);
     ~Parser()=default;
     Prog start();
-    using prefixcall = std::function<std::unique_ptr<Node>()>;
-    using infixcall = std::function<std::unique_ptr<Node>(std::unique_ptr<Node>& )>;
+    using prefixcall = std::function<std::shared_ptr<Node>()>;
+    using infixcall = std::function<std::shared_ptr<Node>(std::shared_ptr<Node>& )>;
 private:
     void setup();
 private:
-    std::unique_ptr<Node> parse_numeric();
-    std::unique_ptr<Node> parse_ident();
-    std::unique_ptr<Node> parse_prefix();
-    std::unique_ptr<Node> parse_binary_expr(std::unique_ptr<Node> lhs);
-    std::unique_ptr<Node> parse_group_expr();
-    std::unique_ptr<Node> parse_expr(precType);
+    std::shared_ptr<Node> parse_numeric();
+    std::shared_ptr<Node> parse_ident();
+    std::shared_ptr<Node> parse_prefix();
+    std::shared_ptr<Node> parse_binary_expr(std::shared_ptr<Node> lhs);
+    std::shared_ptr<Node> ptr_add(token& op,std::shared_ptr<Node> lhs,std::shared_ptr<Node> rhs);
+    std::shared_ptr<Node> ptr_sub(token& op,std::shared_ptr<Node> lhs,std::shared_ptr<Node> rhs);
+    std::shared_ptr<Node> parse_group_expr();
+    std::shared_ptr<Node> parse_expr(precType);
 
-    std::unique_ptr<Stmt> parse_stmt();
-    std::unique_ptr<Stmt> ret_stmt();
-    std::unique_ptr<Stmt> block_stmt();
-    std::unique_ptr<Stmt> if_stmt();
-    std::unique_ptr<Stmt> expr_stmt();
+    std::shared_ptr<Stmt> parse_stmt();
+    std::shared_ptr<Stmt> ret_stmt();
+    std::shared_ptr<Stmt> block_stmt();
+    std::shared_ptr<Stmt> if_stmt();
+    std::shared_ptr<Stmt> expr_stmt();
     
-    std::unique_ptr<Stmt> local_vars(std::shared_ptr<Type> type);
-    std::unique_ptr<Stmt> global_vars(std::shared_ptr<Type> type);
-    std::unique_ptr<Stmt> decl_func(std::shared_ptr<Type> retType);
-    std::vector<std::unique_ptr<Node>> funcParams(const token& tok,std::shared_ptr<Type>& retType);
-    std::unique_ptr<Node> funcall();
-    std::unique_ptr<Node> identifier();
-    std::unique_ptr<Node> arrayvisit();
+    std::shared_ptr<Stmt> local_vars(std::shared_ptr<Type> type);
+    std::shared_ptr<Stmt> global_vars(std::shared_ptr<Type> type);
+    std::shared_ptr<Stmt> decl_func(std::shared_ptr<Type> retType);
+    std::vector<std::shared_ptr<Node>> funcParams(const token& tok,std::shared_ptr<Type> retType);
+    std::shared_ptr<Node> funcall();
+    std::shared_ptr<Node> identifier();
+    std::shared_ptr<Node> arrayvisit();
 
-    std::unique_ptr<Node> var_init(std::shared_ptr<Obj> obj);
-    std::unique_ptr<Node> array_init(std::shared_ptr<Obj> obj);
+    std::shared_ptr<Node> var_init(std::shared_ptr<Obj> obj);
+    std::shared_ptr<Node> array_init(std::shared_ptr<Obj> obj);
 private:
 
     std::shared_ptr<Type> declType();
@@ -92,8 +94,8 @@ private:
     int cur{-1};
     std::vector<token> tokens;
 
-    std::map<tokenType, std::function<std::unique_ptr<Node>()>> prefixcalls;
-    std::map<tokenType, std::function<std::unique_ptr<Node>(std::unique_ptr<Node>& )>> infixcalls;
+    std::map<tokenType, std::function<std::shared_ptr<Node>()>> prefixcalls;
+    std::map<tokenType, std::function<std::shared_ptr<Node>(std::shared_ptr<Node>& )>> infixcalls;
     infixcall get_infix_call(tokenType t);
     prefixcall get_prefix_call(tokenType t);
 };

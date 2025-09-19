@@ -62,6 +62,7 @@ struct token {
           start(st),
           str(s),
           type(t){}
+    bool assert(tokenType ty)const { return type == ty;}
     int val;
     int start;
     std::string_view str;

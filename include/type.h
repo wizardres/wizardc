@@ -60,7 +60,7 @@ public:
     size_t getSize()const override { return _len * _elemTy->getSize(); }
     size_t getlen() { return _len; }
 
-    std::string typestr()const override { return "array type"; }
+    std::string typestr()const override { return std::format("{}[{}]",_elemTy->typestr(),_len); }
     Kind getKind()const override { return Kind::T_array; };
 private:
     int _len;
@@ -78,7 +78,16 @@ public:
     std::shared_ptr<Type> getRetType() { return _retType; }
     const std::vector<std::shared_ptr<Type>> &getParamTypes()const { return _paramTypes; }
 
-    std::string typestr()const override { return "function type"; }
+    std::string typestr()const override {
+        std::string param_type_s{"("};
+        for(size_t i = 0; i < _paramTypes.size();i++){
+            param_type_s += _paramTypes[i]->typestr();
+            if(i < _paramTypes.size()-1)
+                param_type_s.push_back(',');
+        }
+        param_type_s += ")";
+        return std::format("{} {}",_retType->typestr(),param_type_s);
+    }
     Kind getKind()const override { return Kind::T_func; }
 private:
     std::shared_ptr<Type> _retType;
@@ -111,7 +120,7 @@ public:
 
 class typeChecker {
 public:
-    static bool checkEqual(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs);
+    static std::shared_ptr<Type> checkEqual(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs);
     static std::shared_ptr<Type> checkBinaryOp( tokenType op, const std::shared_ptr<Type>& lhs, const std::shared_ptr<Type>& rhs);
 private:
     static bool isPointer(const std::shared_ptr<Type>& type) {
