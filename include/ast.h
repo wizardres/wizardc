@@ -34,15 +34,14 @@ public:
 
 class numericNode final: public Node {
 public:
-    numericNode(int val, std::shared_ptr<Type> type,token tok):
+    numericNode(int val,token tok):
                _value(val),
-               _type(type),
                _tok(tok) {}
     numericNode()=default;
     ~numericNode()=default;
     
-    std::shared_ptr<Type> getType()const override { return _type; }
-    size_t typeSize()const override { return _type->getSize(); };
+    std::shared_ptr<Type> getType()const override { return typeFactor::getInt(Type::Kind::T_int); }
+    size_t typeSize()const override { return getType()->getSize(); };
     bool equal(Node::Kind kind)const override { return kind == Kind::N_number; }
     
     size_t strLength()const override{ return _tok.str.length(); }
@@ -54,7 +53,6 @@ public:
     void accept(visitor& vis) override{ vis.visit(*this); }
 private:
     int _value;
-    std::shared_ptr<Type> _type;
     token _tok;
 };
 

@@ -15,8 +15,7 @@ void codegenerator::visit(numericNode& node) {
 
 void codegenerator::visit(identNode& node) {
     gen_addr(node);
-    if(!Type::isArray(node.getType()))
-        std::cout << "  mov (%rax),%rax\n";
+    load(node);
 }
 
 
@@ -71,6 +70,24 @@ void codegenerator::gen_addr(Node& node) {
 }
 
 
+void codegenerator::store(const Node &node) {
+    pop("rdi");
+    if(node.getType()->getSize() == 1) {
+        std::cout << "  mov %al,(%rdi)\n";
+    }else {
+        std::cout << "  mov %rax,(%rdi)\n";
+    }
+}
+
+void codegenerator::load(const Node& node) {
+    if(!Type::isArray(node.getType())){
+        if(node.getType()->getSize() == 1)
+            std::cout << "  movsbq (%rax),%rax\n";
+        else 
+            std::cout << "  mov (%rax),%rax\n";
+    }
+}
+
 
 void codegenerator::visit(binaryNode& node) {
     tokenType op = node.getOp();
@@ -81,8 +98,7 @@ void codegenerator::visit(binaryNode& node) {
             gen_addr(*lhs);
             push("rax");
             rhs->accept(*this);
-            pop("rdi");
-            std::cout << "  mov %rax,(%rdi)\n";
+            store(*lhs);
         }
         return;
     }

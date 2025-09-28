@@ -8,37 +8,40 @@
 #include "lexer.h"
 class Type {
 public:
-    enum class Kind { T_int,T_ptr,T_func , T_array };
-    Type()=default;
+    enum class Kind { T_int, T_char, T_ptr, T_func , T_array };
+    Type(Kind kind):_kind(kind) {}
     virtual ~Type()=default;
 
-    virtual Kind getKind()const=0;
+    Kind getKind()const { return _kind; };
     virtual size_t getSize()const=0;
     virtual std::string typestr()const=0;
 
-    static bool isPointer(const std::shared_ptr<Type> type){ return type->getKind() == Kind::T_ptr; }
-    static bool isInteger(const std::shared_ptr<Type> type){ return type->getKind() == Kind::T_int; }
-    static bool isArray(const std::shared_ptr<Type> type){ return type->getKind() == Kind::T_array; }
-    static bool areCompatible(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs) { return true;}
+    static bool isPointer(std::shared_ptr<Type> type);
+    static bool isInteger(std::shared_ptr<Type> type);
+    static bool isArray(std::shared_ptr<Type> type);
+    static bool arePtrCompatible(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs); 
+private:
+    Kind _kind;
 };
 
 
 class baseType final : public Type {
 public:
-    baseType(int size,Kind kind):_size(size),_kind(kind){}
+    baseType(int size,Kind kind):Type(kind),_size(size){}
 
-    Kind getKind()const override { return _kind; }
     size_t getSize()const override { return _size; }
-    std::string typestr()const override { return "int"; }
+    std::string typestr()const override { 
+        if(getKind() == Type::Kind::T_int) return "int"; 
+        else return "char";
+    }
 private:
     int _size;
-    Kind _kind;
 };
+
 
 class pointerType final: public Type {
 public:
-    pointerType(std::shared_ptr<Type> base):_base(std::move(base)){}
-    Kind getKind()const override { return Kind::T_ptr; }
+    pointerType(std::shared_ptr<Type> base):Type(Type::Kind::T_ptr),_base(std::move(base)){}
     size_t getSize()const override { return sizeof(void *); }
     std::string typestr()const override { return _base->typestr() + " *"; }
     
@@ -51,6 +54,7 @@ private:
 class arrayType final : public Type{
 public:
     arrayType(size_t len,std::shared_ptr<Type> type):
+              Type(Type::Kind::T_array),
               _len(len),
               _elemTy(type){}
     ~arrayType()=default;
@@ -61,7 +65,6 @@ public:
     size_t getlen() { return _len; }
 
     std::string typestr()const override { return std::format("{}[{}]",_elemTy->typestr(),_len); }
-    Kind getKind()const override { return Kind::T_array; };
 private:
     int _len;
     std::shared_ptr<Type> _elemTy;
@@ -71,6 +74,7 @@ private:
 class funcType final: public Type {
 public:
     funcType(std::shared_ptr<Type> ret,std::vector<std::shared_ptr<Type>> &param):
+        Type(Type::Kind::T_func),
         _retType(ret),
         _paramTypes(std::move(param)){}
 
@@ -88,7 +92,6 @@ public:
         param_type_s += ")";
         return std::format("{} {}",_retType->typestr(),param_type_s);
     }
-    Kind getKind()const override { return Kind::T_func; }
 private:
     std::shared_ptr<Type> _retType;
     std::vector<std::shared_ptr<Type>> _paramTypes;
@@ -98,9 +101,11 @@ private:
 
 class typeFactor {
 public:
-    static std::shared_ptr<Type> getInt() {
-        static auto intType =  std::make_shared<baseType>(8,Type::Kind::T_int);
-        return intType;
+    static std::shared_ptr<Type> getInt(Type::Kind kind) {
+        static std::shared_ptr<Type> intTy = std::make_shared<baseType>(8,Type::Kind::T_int);
+        static std::shared_ptr<Type> charTy = std::make_shared<baseType>(1,Type::Kind::T_char);
+        if(kind == Type::Kind::T_int) return intTy;
+        else return charTy;
     }
 
     static std::shared_ptr<Type> getPointerType(std::shared_ptr<Type> base) {

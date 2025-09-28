@@ -1,5 +1,24 @@
 #include "include/type.h"
 
+bool Type::isPointer(std::shared_ptr<Type> type) {
+    return type->getKind() == Kind::T_ptr;
+}
+
+bool Type::isInteger(std::shared_ptr<Type> type) {
+    return type->getKind() == Kind::T_int || type->getKind() == Kind::T_char;
+}
+
+bool Type::isArray(std::shared_ptr<Type> type) {
+    return type->getKind() == Kind::T_array;
+}
+
+bool Type::arePtrCompatible(const std::shared_ptr<Type>& lhs,const std::shared_ptr<Type>& rhs) {
+    if(!isPointer(lhs) || !isPointer(rhs)) return false;
+    auto lbase = static_cast<pointerType*>(lhs.get())->getBaseType();
+    auto rbase = static_cast<pointerType*>(rhs.get())->getBaseType();
+    return lbase->getKind() == rhs->getKind();
+}
+
 std::shared_ptr<Type> typeChecker::checkBinaryOp(
     tokenType op,
     const std::shared_ptr<Type>& lhs,
@@ -65,10 +84,10 @@ std::shared_ptr<Type> pointerTypeCheck::checkSubtraction(
     if(leftPtr && rightInteger) return lhs;
 
     else if(leftPtr && rightPtr){
-        if(Type::areCompatible(lhs,rhs))
-            return typeFactor::getInt(); 
+        if(Type::arePtrCompatible(lhs,rhs))
+            return typeFactor::getInt(Type::Kind::T_int); 
         else 
-            throw std::format("incompatible pointer type");
+        throw std::format("incompatible pointer type:'{}' and '{}'",lhs->typestr(),rhs->typestr());
     }
     throw std::format("invalid operand of '{}' and '{}' to '-'",lhs->typestr(),rhs->typestr());
 }
@@ -85,10 +104,10 @@ std::shared_ptr<Type> typeChecker::checkEqual(const std::shared_ptr<Type>& lhs,c
     auto decay_r = decayArrayToPointer(rhs);
 
     if(!isPointer(lhs) || !isPointer(decay_r)){
-        if(lhs->getKind() == decay_r->getKind()){
+        if(Type::isInteger(lhs) && Type::isInteger(decay_r)){
             return lhs;
         }
-        throw std::format("'=' has different type at both side:'{}' at left and '{}' at right",lhs->typestr(),rhs->typestr());
+        throw std::format("'=' has different types at both side:'{}' at left and '{}' at right",lhs->typestr(),rhs->typestr());
     }else {
         std::shared_ptr<Type> l = lhs,r = decay_r;
         while(isPointer(l) && isPointer(r)){
@@ -98,6 +117,7 @@ std::shared_ptr<Type> typeChecker::checkEqual(const std::shared_ptr<Type>& lhs,c
         if(l->getKind() == r->getKind()){
             return lhs;
         }
-        throw std::format("'=' has different type at both side:'{}' at left and '{}' at right",lhs->typestr(),rhs->typestr());
+        throw std::format("'=' has different types at both side:'{}' at left and '{}' at right",lhs->typestr(),rhs->typestr());
     }
 }
+

@@ -27,5 +27,7 @@ public:
     void push(std::string_view reg);
     void pop(std::string_view reg);
     void gen_addr(Node& ident);
+    void store(const Node& node);
+    void load(const Node& node);
 };
 #endif

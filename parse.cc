@@ -34,7 +34,8 @@ std::map<tokenType,std::string_view> tokenstrs {
     {tokenType::T_return,"T_return"},
     {tokenType::T_int,"T_int"},
     {tokenType::T_eof,"T_eof"},
-    {tokenType::T_addr,"T_addr"}
+    {tokenType::T_addr,"T_addr"},
+    {tokenType::T_char,"T_char"},
 };
 #endif
 
@@ -107,7 +108,7 @@ Parser::prefixcall Parser::get_prefix_call(tokenType t) {
         if(tokens[prev].type == tokenType::T_eof){
             error(prevToken(),"expect a expression");
         }else{
-            error(prevToken(),std::format("invalid '{}'",prevToken().str));
+            error(prevToken(),std::format("invalid prefix '{}'",prevToken().str));
         }
     }
     return it->second;
@@ -120,7 +121,7 @@ Parser::infixcall Parser::get_infix_call(tokenType t) {
         if(tokens[prev].type == tokenType::T_eof){
             error(prevToken(),"expect a expression");
         }else{
-            error(prevToken(),std::format("invalid '{}'",prevToken().str));
+            error(prevToken(),std::format("invalid infix '{}'",prevToken().str));
         }
     }
     return it->second;
@@ -136,9 +137,18 @@ std::shared_ptr<Type> Parser::pointerPrefix(std::shared_ptr<Type> base) {
 
 
 std::shared_ptr<Type> Parser::declspec() {
-    tkskip(tokenType::T_int,"expect 'int'");
-    return typeFactor::getInt();
+    std::shared_ptr<Type> type;
+    if(tkequal(tokenType::T_int)) {
+        type = typeFactor::getInt(Type::Kind::T_int);
+    }else if(tkequal(tokenType::T_char)) {
+        type = typeFactor::getInt(Type::Kind::T_char);
+    }else{
+        error(curToken(),std::format("invalid type name:",curToken().str));
+    }
+    tokenMove();
+    return type;
 }
+
 
 std::shared_ptr<Type> Parser::declType() {
     std::shared_ptr<Type> base = declspec();
@@ -148,7 +158,7 @@ std::shared_ptr<Type> Parser::declType() {
 
 
 std::shared_ptr<Node> Parser::parse_numeric() {
-    return std::make_shared<numericNode>(prevToken().val,typeFactor::getInt(),prevToken());
+    return std::make_shared<numericNode>(prevToken().val,prevToken());
 }
 
 
@@ -272,8 +282,8 @@ std::shared_ptr<Node> Parser::ptr_add(token& op,std::shared_ptr<Node> lhs,std::s
     if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
     else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
     op.type = tokenType::T_star;
-    std::shared_ptr<Type> type = typeFactor::getInt();
-    std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,type,op);
+    std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
+    std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,op);
     std::shared_ptr<Node> new_node = std::make_shared<binaryNode>(op,rhs,num_node,type);
     op.type = tokenType::T_plus;
     return std::make_shared<binaryNode>(op,lhs,new_node,lhs->getType());
@@ -290,18 +300,18 @@ std::shared_ptr<Node> Parser::ptr_sub(token& op,std::shared_ptr<Node> lhs,std::s
         if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
         else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
         op.type = tokenType::T_star;
-        std::shared_ptr<Type> type = typeFactor::getInt();
-        std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,type,op);
-        std::shared_ptr<Node> new_node = std::make_shared<binaryNode>(op,rhs,num_node,typeFactor::getInt());
+        std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
+        std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,op);
+        std::shared_ptr<Node> new_node = std::make_shared<binaryNode>(op,rhs,num_node,type);
         op.type = tokenType::T_minus;
         return std::make_shared<binaryNode>(op,lhs,new_node,lhs->getType());
     }else {
         if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
         else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
         op.type = tokenType::T_minus;
-        std::shared_ptr<Type> type = typeFactor::getInt();
+        std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
         std::shared_ptr<Node> minus_node = std::make_shared<binaryNode>(op,lhs,rhs,type);
-        std::shared_ptr<Node> num_node = std::make_shared<numericNode>(lhs->typeSize(),type,op);
+        std::shared_ptr<Node> num_node = std::make_shared<numericNode>(lhs->typeSize(),op);
         op.type = tokenType::T_div;
         return std::make_shared<binaryNode>(op,minus_node,num_node,type);
     }
@@ -425,7 +435,7 @@ std::shared_ptr<Node> Parser::var_init(std::shared_ptr<Obj> obj) {
             typeChecker::checkEqual(var->getType(),value->getType());
         }catch(std::string& msg){
             std::string var_type_s = var->getType()->typestr();
-            error(op,std::format("{} reqiures '{}' type,but {} has '{}'",var->strView(),var_type_s,value->strView(),msg));
+            error(op,std::format("{}",msg));
         }
         return std::make_shared<binaryNode>(op,var,value,var->getType()); 
     }
@@ -494,7 +504,7 @@ std::shared_ptr<Stmt> Parser::block_stmt() {
     tkskip(tokenType::T_open_block,"expect '}'");
     std::vector<std::shared_ptr<Stmt>> stmts;
     while(!tkequal(tokenType::T_eof) && !tkequal(tokenType::T_close_block)) {
-        if(tkequal(tokenType::T_int)) {
+        if(tkequal(tokenType::T_int) || tkequal(tokenType::T_char)) {
             stmts.emplace_back(local_vars(declType()));
         }else{
             stmts.emplace_back(parse_stmt());

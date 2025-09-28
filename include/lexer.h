@@ -40,6 +40,7 @@ enum class tokenType {
     T_else,
     T_return,
     T_int,
+    T_char,
     T_eof,
 };
 
