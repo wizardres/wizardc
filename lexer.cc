@@ -1,6 +1,6 @@
 #include "./include/lexer.h"
 
-std::unordered_map<std::string_view,tokenType> keywords = {
+std::unordered_map<std::string,tokenType> keywords = {
     { "if",tokenType::T_if },
     { "else",tokenType::T_else },
     { "int",tokenType::T_int },
@@ -18,13 +18,24 @@ token lexer::identifier() {
     while(is_identifier(peek()) || is_number(peek())) advance();
     
     tokenType type = tokenType::T_identifier;
-    std::string_view str{src.data()+start,cur-start};
+    const std::string& str = src.substr(start,cur-start);
     auto it = keywords.find(str);
     if(it != keywords.end()) {
         type = it->second;
     }
-    return token(0,start,str,type);
+    return token(0,start,src.substr(start,cur-start),type);
 }
+
+token lexer::string() {
+    advance();
+    while(!is_eof(peek()) && !is_string(peek())) advance();
+    if(is_eof(peek())) {
+        error_at(start,cur-start,"expect \"");
+    }
+    advance();
+    return token(0,start,src.substr(start+1,cur-start-2),tokenType::T_string);
+}
+
 
 token lexer::number() {
     char c = peek();
@@ -60,7 +71,7 @@ token lexer::number() {
             error_at(start1,cur-start1,std::format("invalid suffix '{}' on integer constant",src.substr(start1,cur-start1)));
         }
     }
-    return token(num,start,std::string_view(src.data()+start,cur-start),tokenType::T_num);
+    return token(num,start,src.substr(start,cur-start),tokenType::T_num);
 }
 
 token lexer::operator_sign() {
@@ -88,7 +99,7 @@ token lexer::operator_sign() {
         case tokenType::T_neq: advance();
         default:break;
     }
-    return token(0,start,std::string_view(src.data()+start,cur-start),type);
+    return token(0,start,src.substr(start,cur-start),type);
 }
 
 token lexer::bracket() {
@@ -102,7 +113,7 @@ token lexer::bracket() {
         case ']': type = tokenType::T_close_square;break;
     }
     advance();
-    return token(0,start,std::string_view(src.data()+start,cur-start),type);
+    return token(0,start,src.substr(start,cur-start),type);
 }
 
 token lexer::puct() {
@@ -114,11 +125,11 @@ token lexer::puct() {
         case '&': type = tokenType::T_addr;break;
     }
     advance();
-    return token(0,start,std::string_view(src.data()+start,1),type);
+    return token(0,start,src.substr(start,1),type);
 }
 
 token lexer::eof() {
-    return token(0,start,std::string_view(src.data()+start,1),tokenType::T_eof);
+    return token(0,start,src.substr(start,1),tokenType::T_eof);
 }
 
 token lexer::newToken() {
@@ -126,26 +137,18 @@ token lexer::newToken() {
     char c = peek();
     start = cur;
 
-    if(is_number(c)) {
-       return number();
-    }else if(is_identifier(c)) {
-       return identifier();
-    }else if(is_bracket(c)) {
-        return bracket();
-    }else if(is_eof(c)){
-        return eof();
-    }else if(is_operator(c)){
-        return operator_sign();
-    }else if(is_puct(c)){
-        return puct();
-    }else{
-        error_at(start,1,std::format("unrecongenized character:{}",peek()));
-        exit(-1);
-    }
+    if(is_number(c))     return number(); 
+    if(is_identifier(c)) return identifier(); 
+    if(is_string(c))     return string();
+    if(is_bracket(c))    return bracket(); 
+    if(is_eof(c))        return eof(); 
+    if(is_operator(c))   return operator_sign(); 
+    if(is_puct(c))       return puct(); 
+    error_at(start,1,std::format("unrecongenized character:{}",peek()));
 }
 
 
-bool lexer::iskeyword(std::string_view name) {
+bool lexer::iskeyword(const std::string& name) {
     auto it = keywords.find(name);
     return it != keywords.end();
 }

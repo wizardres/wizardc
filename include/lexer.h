@@ -54,19 +54,16 @@ enum class tokenType {
 #define is_hex_num(c) ( (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || is_number(c) )
 #define is_operator(c) ( c == '+' || c == '-' || c == '*' || c == '/' || c == '=' || c == '<' || c == '>' || c == '!') 
 #define is_puct(c) ( c == ';' || c == ',' || c == '.' || c == '&' )
+#define is_string(c) ( c == '"' )
 
 
 struct token {
     token()=default;
-    token(int value,int st,std::string_view s,tokenType t):
-          val(value),
-          start(st),
-          str(s),
-          type(t){}
+    token(int value,int st,const std::string& s,tokenType t): val(value), start(st), str(s), type(t){}
     bool assert(tokenType ty)const { return type == ty;}
     int val;
     int start;
-    std::string_view str;
+    std::string str;
     tokenType type;
 };
 
@@ -88,7 +85,8 @@ public:
     token bracket();
     token puct();
     token eof();
-    bool iskeyword(std::string_view name);
+    token string();
+    bool iskeyword(const std::string& name);
 
     void error_at(int start,int hintlen,std::string_view errmsg);
 private:

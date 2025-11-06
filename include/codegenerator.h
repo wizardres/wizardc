@@ -10,6 +10,7 @@ public:
     virtual ~codegenerator(){}
 
     void visit(numericNode&)override;
+    void visit(stringNode&)override;
     void visit(identNode&)override;
     void visit(prefixNode&)override;
     void visit(binaryNode&)override;

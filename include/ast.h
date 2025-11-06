@@ -8,7 +8,6 @@
 
 #include <iostream>
 #include <string>
-#include <string_view>
 #include <map>
 #include <unordered_set>
 #include <memory>
@@ -19,9 +18,10 @@
 
 class Node {
 public:
-    enum class Kind { N_number,N_identifier,N_deref,N_addr,N_trivial,N_funcall,N_binary,N_arrayvisit,N_arraydef };
+    enum class Kind { N_number,N_identifier,N_string,N_deref,N_addr,N_trivial,N_funcall,N_binary,N_arrayvisit,N_arraydef };
     Node()=default;
     virtual ~Node()=default;
+
     virtual std::shared_ptr<Type> getType()const=0;
     virtual size_t typeSize()const=0;
     virtual size_t strLength()const=0;
@@ -34,19 +34,19 @@ public:
 
 class numericNode final: public Node {
 public:
-    numericNode(int val,token tok):
+    numericNode(int val,const token& tok):
                _value(val),
                _tok(tok) {}
     numericNode()=default;
     ~numericNode()=default;
     
-    std::shared_ptr<Type> getType()const override { return typeFactor::getInt(Type::Kind::T_int); }
-    size_t typeSize()const override { return getType()->getSize(); };
+    std::shared_ptr<Type> getType()const override { return ty; }
+    size_t typeSize()const override { return ty->getSize(); };
     bool equal(Node::Kind kind)const override { return kind == Kind::N_number; }
     
     size_t strLength()const override{ return _tok.str.length(); }
     size_t strStart()const override{ return _tok.start; }
-    std::string strView()const override { return std::string(_tok.str.data(),strLength()); }
+    std::string strView()const override { return _tok.str; }
 
     int Value()const { return _value; }
 
@@ -54,8 +54,31 @@ public:
 private:
     int _value;
     token _tok;
+    static inline std::shared_ptr<Type> ty = typeFactor::getInt();
 };
 
+
+class stringNode final : public Node {
+public:
+    stringNode(const token &tok):_tok(tok),l(label++) {}
+    ~stringNode()=default;
+
+    std::shared_ptr<Type> getType()const override { return ty;}
+    size_t typeSize()const override { return ty->getSize(); };
+    bool equal(Node::Kind kind)const override { return kind == Kind::N_string; }
+
+    size_t strLength()const override{ return _tok.str.length(); }
+    size_t strStart()const override{ return _tok.start; }
+    std::string strView()const override { return _tok.str; }
+
+    void accept(visitor& vis) override { vis.visit(*this); }
+    int get_label()const { return l; }
+private:
+    token _tok;
+    int l;
+    static inline int label = 0;
+    static inline std::shared_ptr<Type> ty = typeFactor::getPointerType(typeFactor::getChar());
+};
 
 
 class identNode final: public Node {
@@ -64,7 +87,7 @@ public:
     identNode()=default;
     ~identNode()=default;
 
-    std::string_view getName()const { return _obj->getToken().str; }
+    std::string getName()const { return _obj->getToken().str; }
 
     std::shared_ptr<Type> getType()const override { return _obj->getType(); }
     size_t typeSize()const override { return _obj->getObjSize(); }
@@ -73,7 +96,7 @@ public:
 
 
     size_t strLength()const override{ return _obj->getToken().str.length(); }
-    std::string strView()const override { return std::string(_obj->getToken().str.data(),strLength()); }
+    std::string strView()const override { return getName(); }
     size_t strStart()const override { return _obj->getToken().start; };
 
     bool isGlobal() { return static_cast<varObj*>(_obj.get())->isGlobal(); }
@@ -85,33 +108,49 @@ private:
 
 class arrayVisit final : public Node {
 public:
-    arrayVisit(std::shared_ptr<Obj> obj,
-               size_t idx,token tok):
-               _obj(obj),
-               _idx(idx),
-               _tok(tok) {}
-    arrayVisit()=default;
+    arrayVisit(std::shared_ptr<Obj> obj, size_t idx): _obj(obj), _idx(idx) {
+        _tok = obj->getToken();
+        auto Ty = _obj->getType();
+        if(Type::isArray(Ty)) {
+            auto array_obj = static_cast<arrayObj*>(_obj.get());
+            _baseTy = static_cast<arrayType*>(Ty.get())->elemTy();
+            _offset = array_obj->getOffset();
+            _global = array_obj->isGlobal();
+            _is_array = true;
+        }else {
+            auto ptr_obj = static_cast<arrayObj*>(_obj.get());
+            _baseTy = static_cast<pointerType*>(Ty.get())->getBaseType();
+            _offset = ptr_obj->getOffset();
+            _global = ptr_obj->isGlobal();
+            _is_array = false;
+        }
+    }
     ~arrayVisit()=default;
 
-    bool isGlobal() { return static_cast<varObj*>(_obj.get())->isGlobal(); }
+    bool isGlobal()const { return _global; }
+    bool isArray()const { return _is_array; }
 
-    std::string_view getName()const { return _obj->getToken().str; }
+    std::string getName()const { return _tok.str; }
     int elemOffset()const { return _idx * typeSize(); }
-    int arrOffset()const { return static_cast<varObj*>(_obj.get())->getOffset(); }
+    int getOffset()const { return _offset; }
 
-    size_t typeSize()const override{ return static_cast<arrayObj*>(_obj.get())->getElemSize(); }
-    std::shared_ptr<Type> getType()const override {  return static_cast<arrayObj*>(_obj.get())->getElemType(); }
+    size_t typeSize()const override{ return _baseTy->getSize(); }
+    std::shared_ptr<Type> getType()const override { return _baseTy; }
     bool equal(Node::Kind kind)const override { return kind == Kind::N_arrayvisit; }
     
     size_t strLength()const override{ return _tok.str.length(); }
     size_t strStart()const override{ return _tok.start; }
-    std::string strView()const override { return std::string(_tok.str.data(),strLength()); }
+    std::string strView()const override { return _tok.str; }
 
     void accept(visitor& vis) override{ vis.visit(*this); }
 private:
     std::shared_ptr<Obj> _obj;
     size_t _idx;
     token _tok;
+    int _offset;
+    bool _global;
+    std::shared_ptr<Type> _baseTy;
+    bool _is_array;
 };
 
 
@@ -124,15 +163,15 @@ public:
     arraydef()=default;
     ~arraydef()=default;
 
-    std::string_view getName()const { return _obj->getToken().str; }
+    std::string getName()const { return _obj->getToken().str; }
 
-    size_t typeSize()const override{ return static_cast<arrayObj*>(_obj.get())->getObjSize(); }
+    size_t typeSize()const override{ return _obj->getObjSize(); }
     size_t elemSize()const { return static_cast<arrayObj*>(_obj.get())->getElemSize(); }
     std::shared_ptr<Type> getType()const override {  return _obj->getType(); }
     bool equal(Node::Kind kind)const override { return kind == Kind::N_arraydef; }
 
     size_t strLength()const override{ return _obj->getToken().str.length(); }
-    std::string strView()const override { return std::string(_obj->getToken().str.data(),strLength()); }
+    std::string strView()const override { return getName(); }
     size_t strStart()const override{ return _obj->getToken().start; }
 
     bool isGlobal() { return static_cast<arrayObj*>(_obj.get())->isGlobal(); }
@@ -149,8 +188,7 @@ class prefixNode final: public Node {
 public:
     prefixNode(std::shared_ptr<Node> expr,
                std::shared_ptr<Type> type,
-               Kind kind,
-               token tok):
+               Kind kind, token tok):
               _expr(expr),
               _type(type),
               _kind(kind),
@@ -222,7 +260,7 @@ public:
     funcallNode()=default;
     ~funcallNode()=default;
 
-    std::string_view getName()const { return _tok.str; }
+    std::string getName()const { return _tok.str; }
     const std::vector<std::shared_ptr<Node>> &getArgs()const { return _args; }
 
     std::shared_ptr<Type> getType()const override { return static_cast<funcObj*>(_funcobj.get())->getRetType(); }
@@ -282,11 +320,11 @@ public:
     void accept(visitor& vis) override{ vis.visit(*this); }
 
     const std::shared_ptr<Stmt>& getStmt()const { return _e; }
-    static std::string_view getName() { return _funcname; }
-    static void setFuncName(std::string_view name) { _funcname = name; }
+    static std::string getName() { return _funcname; }
+    static void setFuncName(const std::string& name) { _funcname = name; }
 private:
     std::shared_ptr<Stmt> _e;
-    static inline std::string_view _funcname;
+    static inline std::string _funcname;
 };
 
 
@@ -337,7 +375,7 @@ class funcdef final : public Stmt {
 public:
     funcdef()=default;
     funcdef( std::shared_ptr<Stmt>& _b,
-             std::string_view _n,
+             const std::string& _n,
              std::vector<std::shared_ptr<Node>> &_params,
              int _stackoff):
                     _body(std::move(_b)),
@@ -357,7 +395,7 @@ public:
 
     static std::shared_ptr<Stmt> newFunction(
                           std::shared_ptr<Stmt>& _b,
-                          std::string_view _n,
+                          const std::string& _n,
                           std::vector<std::shared_ptr<Node>> &_params) {
         std::shared_ptr<Stmt> func = std::make_shared<funcdef>(_b,_n,_params,align(16));
         stackrelease();
@@ -365,12 +403,12 @@ public:
     }
 
     const std::shared_ptr<Stmt>& getBody()const { return _body; }
-    std::string_view getName()const { return _name;}
+    std::string getName()const { return _name;}
     const std::vector<std::shared_ptr<Node>>& getParams()const { return _params; }
     int getStackOff() { return _stackoff; }
 private:
     std::shared_ptr<Stmt> _body;
-    std::string_view _name;
+    std::string _name;
     std::vector<std::shared_ptr<Node>> _params;
     int _stackoff;
     static inline int _stacksize{0};

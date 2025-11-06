@@ -85,7 +85,7 @@ std::shared_ptr<Type> pointerTypeCheck::checkSubtraction(
 
     else if(leftPtr && rightPtr){
         if(Type::arePtrCompatible(lhs,rhs))
-            return typeFactor::getInt(Type::Kind::T_int); 
+            return typeFactor::getInt(); 
         else 
         throw std::format("incompatible pointer type:'{}' and '{}'",lhs->typestr(),rhs->typestr());
     }

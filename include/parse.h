@@ -9,7 +9,6 @@
 
 #include <iostream>
 #include <string>
-#include <string_view>
 #include <map>
 #include <unordered_set>
 #include <memory>
@@ -42,6 +41,7 @@ private:
 private:
     std::shared_ptr<Node> parse_numeric();
     std::shared_ptr<Node> parse_ident();
+    std::shared_ptr<Node> parse_string();
     std::shared_ptr<Node> parse_prefix();
     std::shared_ptr<Node> parse_binary_expr(std::shared_ptr<Node> lhs);
     std::shared_ptr<Node> ptr_add(token& op,std::shared_ptr<Node> lhs,std::shared_ptr<Node> rhs);
@@ -74,11 +74,11 @@ private:
     
     void error(const token& t,std::string_view msg);
     void error(int start,int hint_len,std::string_view msg);
-    void keywordCheck(const token& tok,std::string_view name);
+    void keywordCheck(const token& tok,const std::string& name);
 
-    void tkskip(tokenType expected,std::string_view msg);
+    void tkskip(tokenType expected,const std::string& msg);
     bool tkequal(tokenType expect);
-    void tkexpect(tokenType expect,std::string_view msg);
+    void tkexpect(tokenType expect,const std::string& msg);
     bool tkconsume(tokenType expect);
     void tokenMove();
     void tokenBack();

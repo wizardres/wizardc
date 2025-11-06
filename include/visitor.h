@@ -2,6 +2,7 @@
 #define VISITOR_H_
 
 class numericNode;
+class stringNode;
 class identNode;
 class prefixNode;
 class binaryNode;
@@ -22,6 +23,7 @@ public:
     virtual ~visitor()=default;
 
     virtual void visit(numericNode&)=0;
+    virtual void visit(stringNode&)=0;
     virtual void visit(identNode&)=0;
     virtual void visit(prefixNode&)=0;
     virtual void visit(binaryNode&)=0;

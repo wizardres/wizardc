@@ -43,6 +43,7 @@ class pointerType final: public Type {
 public:
     pointerType(std::shared_ptr<Type> base):Type(Type::Kind::T_ptr),_base(std::move(base)){}
     size_t getSize()const override { return sizeof(void *); }
+    size_t baseTypeSize()const { return _base->getSize(); }
     std::string typestr()const override { return _base->typestr() + " *"; }
     
     std::shared_ptr<Type> getBaseType()const { return _base;}
@@ -101,13 +102,12 @@ private:
 
 class typeFactor {
 public:
-    static std::shared_ptr<Type> getInt(Type::Kind kind) {
-        static std::shared_ptr<Type> intTy = std::make_shared<baseType>(8,Type::Kind::T_int);
-        static std::shared_ptr<Type> charTy = std::make_shared<baseType>(1,Type::Kind::T_char);
-        if(kind == Type::Kind::T_int) return intTy;
-        else return charTy;
+    static std::shared_ptr<Type> getInt() {
+        return std::make_shared<baseType>(8,Type::Kind::T_int);
     }
-
+    static std::shared_ptr<Type> getChar() {
+        return std::make_shared<baseType>(1,Type::Kind::T_char);
+    }
     static std::shared_ptr<Type> getPointerType(std::shared_ptr<Type> base) {
         return std::make_shared<pointerType>(base);
     }

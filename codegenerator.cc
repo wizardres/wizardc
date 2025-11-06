@@ -18,6 +18,10 @@ void codegenerator::visit(identNode& node) {
     load(node);
 }
 
+void codegenerator::visit(stringNode& node) {
+    gen_addr(node);
+}
+
 
 void codegenerator::visit(prefixNode& node) {
     if(node.equal(Node::Kind::N_addr)) {
@@ -55,17 +59,24 @@ void codegenerator::gen_addr(Node& node) {
             std::cout << std::format("  lea {}(%rip),%rax\n",ident.getName());
         else
             std::cout << std::format("  lea {}(%rbp),%rax\n",ident.getOffset());
-    }else if(node.equal(Node::Kind::N_arrayvisit)) {
+    }
+    else if(node.equal(Node::Kind::N_arrayvisit)) {
         auto arr = dynamic_cast<arrayVisit&>(node);
         if(arr.isGlobal()) {
             std::cout << std::format("  lea {} + {}(%rip),%rax\n",arr.elemOffset(),arr.getName());
         }else {
-            std::cout << std::format("  lea {}(%rbp),%rax\n",arr.elemOffset() + arr.arrOffset());
+            std::cout << std::format("  lea {}(%rbp),%rax\n",arr.elemOffset() + arr.getOffset());
         }
     }
     else if(node.equal(Node::Kind::N_deref)){
         auto prefix = dynamic_cast<prefixNode&>(node);
         prefix.getNode()->accept(*this);
+    }
+    else if(node.equal(Node::Kind::N_string)) {
+        auto str = dynamic_cast<stringNode&>(node);
+        std::cout << std::format("  lea .str.{}(%rip),%rax\n",str.get_label());
+    }else {
+        exit(-1);
     }
 }
 
@@ -186,11 +197,21 @@ void codegenerator::visit(arraydef& def) {
 
 
 void codegenerator::visit(arrayVisit& v) {
-    if(v.isGlobal()) {
-        std::cout << std::format("  lea {} + {}(%rip),%rax\n  mov (%rax),%rax\n",v.elemOffset(),v.getName());
-    }else{
-        std::cout << std::format("  lea {}(%rbp),%rax\n",v.elemOffset() + v.arrOffset());
-        std::cout << std::format("  mov (%rax),%rax\n");
+    if(v.isArray()) {
+        gen_addr(v);
+        load(v);
+    }else {
+        if(v.isGlobal()) {
+            std::cout << std::format("  lea {}(%rip),%rax\n",v.getName());
+        }else {
+            std::cout << std::format("  lea {}(%rbp),%rax\n",v.getOffset());
+        }
+        std::cout << "  mov (%rax),%rax\n";
+        std::cout << std::format("  lea {}(%rax),%rax\n",v.elemOffset());
+        if(v.getType()->getSize() == 1)
+            std::cout << "  movsbq (%rax),%rax\n";
+        else 
+            std::cout << "  mov (%rax),%rax\n";
     }
 }
 
@@ -199,15 +220,14 @@ void codegenerator::visit(vardef& vars) {
     auto &decls = vars.getDeclas();
     if(vars.isGlobal()) {
         for(auto &var : decls) {
-            if(var->equal(Node::Kind::N_identifier)){
-                auto ident = static_cast<identNode*>(var.get());
-                std::cout << std::format("  .globl {}\n  .data\n",ident->getName());
-                std::cout << std::format("{}:\n  .zero {}\n",ident->getName(),ident->typeSize());
-            }else if(var->equal(Node::Kind::N_arraydef)) {
-                auto arr = static_cast<arraydef*>(var.get());
-                std::cout << std::format("  .globl {}\n  .data\n",arr->getName());
-                std::cout << std::format("{}:\n  .zero {}\n",arr->getName(),arr->typeSize());
-            }else {
+            if(var->equal(Node::Kind::N_string)) {
+                auto str = dynamic_cast<stringNode*>(var.get());
+                std::cout << std::format("  .globl .str.{}\n  .data\n.str.{}:\n",str->get_label(),str->get_label());
+                std::cout << std::format("  .string \"{}\"\n",str->strView());
+            } else if(var->equal(Node::Kind::N_identifier) || var->equal(Node::Kind::N_arraydef)) {
+                std::cout << std::format("  .globl {}\n  .data\n{}:\n",var->strView(),var->strView());
+                std::cout << std::format("  .zero {}\n",var->typeSize());
+            } else {
                 return;
             }
         }

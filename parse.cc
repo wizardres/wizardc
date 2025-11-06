@@ -1,9 +1,9 @@
 #include "include/parse.h"
 
 Scope scope;
-
+std::vector<std::shared_ptr<Stmt>> global_def;
 #ifdef DEBUG
-std::map<tokenType,std::string_view> tokenstrs {
+std::map<tokenType,std::string> tokenstrs {
     {tokenType::T_num,"T_num"},
     {tokenType::T_string,"T_string"},
     {tokenType::T_identifier,"T_identifier"},
@@ -67,7 +67,7 @@ void Parser::error(int start,int hint_len,std::string_view msg){
     lex.error_at(start,hint_len,msg);
 }
 
-void Parser::tkskip(tokenType expected,std::string_view msg) {
+void Parser::tkskip(tokenType expected,const std::string& msg) {
     if(curToken().type != expected) error(curToken(),msg);
     else tokenMove();
 }
@@ -78,7 +78,7 @@ bool Parser::tkequal(tokenType expect) {
 }
 
 
-void Parser::tkexpect(tokenType expect,std::string_view msg) {
+void Parser::tkexpect(tokenType expect,const std::string& msg) {
     if(tokens[cur].type != expect) {
         error(curToken(),msg);
     }
@@ -139,9 +139,9 @@ std::shared_ptr<Type> Parser::pointerPrefix(std::shared_ptr<Type> base) {
 std::shared_ptr<Type> Parser::declspec() {
     std::shared_ptr<Type> type;
     if(tkequal(tokenType::T_int)) {
-        type = typeFactor::getInt(Type::Kind::T_int);
+        type = typeFactor::getInt();
     }else if(tkequal(tokenType::T_char)) {
-        type = typeFactor::getInt(Type::Kind::T_char);
+        type = typeFactor::getChar();
     }else{
         error(curToken(),std::format("invalid type name:",curToken().str));
     }
@@ -161,9 +161,16 @@ std::shared_ptr<Node> Parser::parse_numeric() {
     return std::make_shared<numericNode>(prevToken().val,prevToken());
 }
 
+std::shared_ptr<Node> Parser::parse_string() {
+    std::shared_ptr<Node> str_node = std::make_shared<stringNode>(prevToken());
+    std::vector<std::shared_ptr<Node>> decls{str_node};
+    global_def.push_back(std::make_shared<vardef>(decls,true));
+    return str_node;
+}
+
 
 std::shared_ptr<Node> Parser::identifier() {
-    std::string_view str = prevToken().str;
+    const std::string& str = prevToken().str;
     auto result = scope.lookup_allscope(str);
     if(!result.has_value()) {
         error(prevToken(),std::format("'{}' undeclared",str));
@@ -174,7 +181,7 @@ std::shared_ptr<Node> Parser::identifier() {
 
 std::shared_ptr<Node> Parser::funcall() {
     token tok = prevToken();
-    std::string_view name = tok.str;
+    const std::string& name = tok.str;
     auto result = scope.lookup_global(name);
     if(!result.has_value()) {
         error(tok,std::format("function '{}' not found",name));
@@ -207,17 +214,21 @@ std::shared_ptr<Node> Parser::funcall() {
 
 
 std::shared_ptr<Node> Parser::arrayvisit() {
-    token tok = prevToken();
-    std::string_view arr_name = tok.str;
-    auto result = scope.lookup_allscope(arr_name);
+    const std::string& name = prevToken().str;
+    auto result = scope.lookup_allscope(name);
     if(!result.has_value()) {
-        error(prevToken(),std::format("'{}' not found",arr_name));
+        error(prevToken(),std::format("'{}' not found",name));
+    }
+    auto obj = result.value();
+    auto ty = obj->getType();
+    if(!Type::isArray(ty) && !Type::isPointer(ty)) {
+        error(result.value()->getToken(),"subscripted value is neither array nor pointer\n");
     }
     tokenMove();
     size_t idx = curToken().val;
     tkskip(tokenType::T_num,"expect an num");
     tkskip(tokenType::T_close_square,"expect ']'");
-    return std::make_shared<arrayVisit>(result.value(),idx,tok);
+    return std::make_shared<arrayVisit>(obj,idx);
 }
 
 
@@ -279,10 +290,13 @@ std::shared_ptr<Node> Parser::ptr_add(token& op,std::shared_ptr<Node> lhs,std::s
         std::swap(lhs,rhs);
     }
     size_t size;
-    if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
-    else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
+    if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();  
+    else {
+        auto ptr = static_cast<pointerType*>(lhs->getType().get());
+        size = ptr->getBaseType()->getSize();
+    }
     op.type = tokenType::T_star;
-    std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
+    std::shared_ptr<Type> type = typeFactor::getInt();
     std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,op);
     std::shared_ptr<Node> new_node = std::make_shared<binaryNode>(op,rhs,num_node,type);
     op.type = tokenType::T_plus;
@@ -300,16 +314,19 @@ std::shared_ptr<Node> Parser::ptr_sub(token& op,std::shared_ptr<Node> lhs,std::s
         if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
         else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
         op.type = tokenType::T_star;
-        std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
+        std::shared_ptr<Type> type = typeFactor::getInt();
         std::shared_ptr<Node> num_node = std::make_shared<numericNode>(size,op);
         std::shared_ptr<Node> new_node = std::make_shared<binaryNode>(op,rhs,num_node,type);
         op.type = tokenType::T_minus;
         return std::make_shared<binaryNode>(op,lhs,new_node,lhs->getType());
     }else {
-        if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();
-        else size = static_cast<pointerType*>(lhs->getType().get())->getSize();
+        if(Type::isArray(lhs->getType())) size = static_cast<arrayType*>(lhs->getType().get())->elemSize();  
+        else {
+            auto ptr = static_cast<pointerType*>(lhs->getType().get());
+            size = ptr->getBaseType()->getSize();
+        }
         op.type = tokenType::T_minus;
-        std::shared_ptr<Type> type = typeFactor::getInt(Type::Kind::T_int);
+        std::shared_ptr<Type> type = typeFactor::getInt();
         std::shared_ptr<Node> minus_node = std::make_shared<binaryNode>(op,lhs,rhs,type);
         std::shared_ptr<Node> num_node = std::make_shared<numericNode>(lhs->typeSize(),op);
         op.type = tokenType::T_div;
@@ -376,7 +393,7 @@ std::shared_ptr<Stmt> Parser::if_stmt() {
     return std::make_shared<ifStmt>(_cond,_then,_else);
 }
 
-void Parser::keywordCheck(const token &tok,std::string_view name) {
+void Parser::keywordCheck(const token &tok,const std::string& name) {
     if(lex.iskeyword(name))
         error(tok,std::format("variable name couldn't be a keyword:'{}'",name));
 }
@@ -394,7 +411,7 @@ std::shared_ptr<Obj> Parser::varTypeSuffix(std::shared_ptr<Type> type) {
     type = pointerPrefix(type);
     token tok = curToken();
     tkskip(tokenType::T_identifier,"expect an identifier");
-    std::string_view name = tok.str;
+    const std::string& name = tok.str;
     bool isglobal = scope.isglobal();
     int off = 0;
     if(is_array()) {
@@ -479,7 +496,11 @@ std::shared_ptr<Node> Parser::array_init(std::shared_ptr<Obj> obj) {
 
 std::shared_ptr<Stmt> Parser::local_vars(std::shared_ptr<Type> type) {
     std::vector<std::shared_ptr<Node>> vars;
+    bool first = true;
     while(1) {
+        if(!first) {
+            if(Type::isPointer(type)) type = static_cast<pointerType*>(type.get())->getBaseType();
+        }
         auto obj = varTypeSuffix(type);
         if(obj->getKind() == Obj::objKind::variable) {
             vars.push_back(var_init(obj));
@@ -487,6 +508,7 @@ std::shared_ptr<Stmt> Parser::local_vars(std::shared_ptr<Type> type) {
             vars.push_back(array_init(obj));
         }
         if(tkconsume(tokenType::T_comma)){
+            first = false;
             continue;
         }
         if(!tkconsume(tokenType::T_semicolon)) {
@@ -540,7 +562,7 @@ std::vector<std::shared_ptr<Node>> Parser::funcParams(
     std::shared_ptr<Type> retType) {
 
     bool first = false;
-    std::string_view name = tok.str;
+    const std::string& name = tok.str;
     std::vector<std::shared_ptr<Node>> params;
     std::vector<std::shared_ptr<Type>> paramTypes;
     while(!tkequal(tokenType::T_close_paren)) {
@@ -596,20 +618,19 @@ std::shared_ptr<Stmt> Parser::global_vars(std::shared_ptr<Type> type) {
 
 
 Prog Parser::start() {
-    std::vector<std::shared_ptr<Stmt>> stmts;
     while(!tkequal(tokenType::T_eof)) {
         std::shared_ptr<Type> type = declType();
         tokenMove();
         if(is_function()) {
-            stmts.push_back(decl_func(type));
+            global_def.push_back(decl_func(type));
         }
         else {
             tokenBack();
-            stmts.push_back(global_vars(type));
+            global_def.push_back(global_vars(type));
         }
         while(tkequal(tokenType::T_semicolon)) tokenMove();
     }
-    return Prog(stmts);
+    return Prog(global_def);
 }
 
 
@@ -636,10 +657,10 @@ const token &Parser::prevToken() {
 }
 
 
-
 void Parser::setup() {
    prefixcalls[tokenType::T_num] = [this]() { return parse_numeric(); }; 
    prefixcalls[tokenType::T_identifier] = [this]() { return parse_ident(); }; 
+   prefixcalls[tokenType::T_string] = [this]() { return parse_string(); }; 
    prefixcalls[tokenType::T_minus] = [this]() { return parse_prefix(); }; 
    prefixcalls[tokenType::T_star] = [this]() { return parse_prefix(); }; 
    prefixcalls[tokenType::T_addr] = [this]() { return parse_prefix(); }; 
