@@ -336,12 +336,34 @@ public:
     void compileCond(visitor &vis) {
         if(_cond) _cond->accept(vis);
     }
-    void compileBOdy(visitor &vis) {
+    void compileBody(visitor &vis) {
         if(_body) _body->accept(vis);
     }
     
 private:
     std::shared_ptr<Node> _cond;
+    std::shared_ptr<Stmt> _body;
+};
+
+class forStmt final : public Stmt {
+public:
+    forStmt(std::shared_ptr<Stmt> init,std::shared_ptr<Stmt> cond,
+            std::shared_ptr<Node> inc,std::shared_ptr<Stmt> body):_init(init),_cond(cond),_inc(inc),_body(body) {}
+    ~forStmt()=default;
+    void accept(visitor& vis) override{ vis.visit(*this); }
+
+    void compileInit(visitor &vis)const { if(_init) _init->accept(vis); }
+    void compileInc(visitor &vis)const { if(_inc)  _inc->accept(vis); }
+    void compileBody(visitor &vis)const { if(_body) _body->accept(vis); }
+    bool compileCond(visitor &vis)const {
+         if(_cond) _cond->accept(vis); 
+         return _cond != nullptr;
+    }
+    
+private:
+    std::shared_ptr<Stmt> _init;
+    std::shared_ptr<Stmt> _cond;
+    std::shared_ptr<Node> _inc;
     std::shared_ptr<Stmt> _body;
 };
 

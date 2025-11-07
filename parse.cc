@@ -369,6 +369,7 @@ std::shared_ptr<Node> Parser::parse_expr(precType prec) {
 
 
 std::shared_ptr<Stmt> Parser::expr_stmt() {
+    if(tkconsume(tokenType::T_semicolon)) return nullptr;
     std::shared_ptr<Node> e = parse_expr(precType::P_none);
     tkskip(tokenType::T_semicolon,"expect ';'");
     return std::make_shared<exprStmt>(e);
@@ -376,7 +377,6 @@ std::shared_ptr<Stmt> Parser::expr_stmt() {
 
 
 std::shared_ptr<Stmt> Parser::if_stmt() {
-    tokenMove();
     tkskip(tokenType::T_open_paren,"expect '(' after 'if' of if-statement");
     if(tkequal(tokenType::T_close_paren)) {
         error(curToken(),"expect an expression");
@@ -493,7 +493,8 @@ std::shared_ptr<Node> Parser::array_init(std::shared_ptr<Obj> obj) {
 
 
 
-std::shared_ptr<Stmt> Parser::local_vars(std::shared_ptr<Type> type) {
+std::shared_ptr<Stmt> Parser::local_vars() {
+    std::shared_ptr<Type> type = declType();
     std::vector<std::shared_ptr<Node>> vars;
     bool first = true;
     while(1) {
@@ -522,11 +523,11 @@ std::shared_ptr<Stmt> Parser::local_vars(std::shared_ptr<Type> type) {
 
 
 std::shared_ptr<Stmt> Parser::block_stmt() {
-    tkskip(tokenType::T_open_block,"expect '}'");
+    tkskip(tokenType::T_open_block,"expect '{'");
     std::vector<std::shared_ptr<Stmt>> stmts;
     while(!tkequal(tokenType::T_eof) && !tkequal(tokenType::T_close_block)) {
         if(tkequal(tokenType::T_int) || tkequal(tokenType::T_char)) {
-            stmts.emplace_back(local_vars(declType()));
+            stmts.emplace_back(local_vars());
         }else{
             stmts.emplace_back(parse_stmt());
         }
@@ -537,13 +538,11 @@ std::shared_ptr<Stmt> Parser::block_stmt() {
 
 
 std::shared_ptr<Stmt> Parser::ret_stmt() {
-    tokenMove();
     std::shared_ptr<Stmt> s = expr_stmt();
     return std::make_shared<retStmt>(s);
 }
 
 std::shared_ptr<Stmt> Parser::while_stmt() {
-    tokenMove();
     tkskip(tokenType::T_open_paren,"expect '('");
     std::shared_ptr<Node> cond = parse_expr(precType::P_none);
     tkskip(tokenType::T_close_paren,"expect ')'");
@@ -554,6 +553,33 @@ std::shared_ptr<Stmt> Parser::while_stmt() {
     return std::make_shared<whileStmt>(cond,body);
 }
 
+std::shared_ptr<Stmt> Parser::init_stmt() {
+    if(tkequal(tokenType::T_int) || tkequal(tokenType::T_char)) {
+        return local_vars();
+    }
+    return expr_stmt();
+}
+
+
+std::shared_ptr<Stmt> Parser::for_stmt() {
+    tkskip(tokenType::T_open_paren,"expect '(");
+    std::shared_ptr<Stmt> init;
+    std::shared_ptr<Stmt> cond;
+    std::shared_ptr<Node> inc;
+    std::shared_ptr<Stmt> body;
+    scope.enter();
+    init = init_stmt();
+    cond = expr_stmt();
+    if(!tkconsume(tokenType::T_close_paren)){
+        inc = parse_expr(precType::P_none);
+        tkskip(tokenType::T_close_paren,"expect ')'");
+    } 
+    body = parse_stmt();
+    scope.leave();
+    return std::make_shared<forStmt>(init,cond,inc,body);
+}
+
+
 std::shared_ptr<Stmt> Parser::parse_stmt() {
     if(tkequal(tokenType::T_open_block)) {
         scope.enter();
@@ -561,9 +587,11 @@ std::shared_ptr<Stmt> Parser::parse_stmt() {
         scope.leave();
         return s;
     } 
-    if(tkequal(tokenType::T_if))     return if_stmt();
-    if(tkequal(tokenType::T_return)) return ret_stmt();
-    if(tkequal(tokenType::T_while))  return while_stmt();
+    if(tkconsume(tokenType::T_if))     return if_stmt();
+    if(tkconsume(tokenType::T_return)) return ret_stmt();
+    if(tkconsume(tokenType::T_while))  return while_stmt();
+    if(tkconsume(tokenType::T_for))    return for_stmt();
+    if(tkconsume(tokenType::T_semicolon)) return nullptr;
     return expr_stmt();
 }
 

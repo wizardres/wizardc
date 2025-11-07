@@ -39,6 +39,7 @@ enum class tokenType {
     T_if,
     T_else,
     T_while,
+    T_for,
     T_return,
     T_int,
     T_char,

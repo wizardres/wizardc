@@ -1,10 +1,15 @@
 #include "include/codegenerator.h"
 
 
+int level() {
+    static int level = 0;
+    return level++;
+}
 
 void codegenerator::push(std::string_view reg) {
     std::cout << "  push %" << reg << "\n";
 }
+
 void codegenerator::pop(std::string_view reg) {
     std::cout << "  pop %" << reg << "\n";
 }
@@ -165,19 +170,30 @@ void codegenerator::visit(binaryNode& node) {
 }
 
 void codegenerator::visit(whileStmt& S) {
-    static int level = 0;
-    std::string label = std::format(".while.{}", level++);
+    std::string label = std::format(".while.{}", level());
     std::string end_label = ".while.end";
     std::cout << std::format("{}:\n",label);
     S.compileCond(*this);
     std::cout << std::format("  cmp $0,%rax\n  je {}\n",end_label);
-    S.compileBOdy(*this);
+    S.compileBody(*this);
     std::cout << std::format("  jmp {}\n{}:\n",label,end_label);
 }
 
+void codegenerator::visit(forStmt &S) {
+    S.compileInit(*this);
+    std::string label = std::format(".for.{}",level());
+    std::string end_label = ".for.end";
+    std::cout << std::format("{}:\n",label);
+    if(S.compileCond(*this))
+        std::cout << std::format("  cmp $0,%rax\n  je {}\n",end_label);
+    S.compileBody(*this);
+    S.compileInc(*this);
+    std::cout << std::format("  jmp {}\n{}:\n",label,end_label);
+}
+
+
 void codegenerator::visit(ifStmt& S) {
-    static int level = 0;
-    int l = level++;
+    int l = level();
     auto &cond = S.getCond();
     auto &then = S.getThen();
     auto &elseStmt = S.getElse();
@@ -215,8 +231,6 @@ void codegenerator::visit(arraydef& def) {
         offset += size;
     }
 }
-
-
 
 
 void codegenerator::visit(arrayVisit& v) {

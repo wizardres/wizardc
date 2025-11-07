@@ -52,11 +52,13 @@ private:
     std::shared_ptr<Stmt> parse_stmt();
     std::shared_ptr<Stmt> ret_stmt();
     std::shared_ptr<Stmt> block_stmt();
+    std::shared_ptr<Stmt> for_stmt();
+    std::shared_ptr<Stmt> init_stmt();
     std::shared_ptr<Stmt> if_stmt();
     std::shared_ptr<Stmt> while_stmt();
     std::shared_ptr<Stmt> expr_stmt();
     
-    std::shared_ptr<Stmt> local_vars(std::shared_ptr<Type> type);
+    std::shared_ptr<Stmt> local_vars();
     std::shared_ptr<Stmt> global_vars(std::shared_ptr<Type> type);
     std::shared_ptr<Stmt> decl_func(std::shared_ptr<Type> retType);
     std::vector<std::shared_ptr<Node>> funcParams(const token& tok,std::shared_ptr<Type> retType);

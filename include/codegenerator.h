@@ -19,6 +19,7 @@ public:
     void visit(arraydef&)override;
     void visit(ifStmt&)override;
     void visit(whileStmt&)override;
+    void visit(forStmt&)override;
     void visit(exprStmt&)override;
     void visit(blockStmt&)override;
     void visit(retStmt&)override;
