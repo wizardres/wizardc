@@ -6,6 +6,7 @@ std::unordered_map<std::string,tokenType> keywords = {
     { "int",tokenType::T_int },
     { "return",tokenType::T_return },
     { "char",tokenType::T_char },
+    { "while",tokenType::T_while },
 };
 
 void lexer::error_at(int start,int hintlen,std::string_view errmsg) {

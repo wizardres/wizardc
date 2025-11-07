@@ -9,6 +9,14 @@ void codegenerator::pop(std::string_view reg) {
     std::cout << "  pop %" << reg << "\n";
 }
 
+void gen_offset(visitor& vis,arrayVisit &v) {
+    size_t size = v.typeSize();
+    std::cout << std::format("  mov ${},%rax\n  push %rax\n",size);
+    auto idx = v.get_idx();
+    idx->accept(vis);
+    std::cout << "  pop %rdi\n  imul %rdi,%rax\n  push %rax\n";
+}
+
 void codegenerator::visit(numericNode& node) {
     std::cout << std::format("  mov ${},%rax\n",node.Value());
 }
@@ -62,11 +70,13 @@ void codegenerator::gen_addr(Node& node) {
     }
     else if(node.equal(Node::Kind::N_arrayvisit)) {
         auto arr = dynamic_cast<arrayVisit&>(node);
+        gen_offset(*this,arr);
         if(arr.isGlobal()) {
-            std::cout << std::format("  lea {} + {}(%rip),%rax\n",arr.elemOffset(),arr.getName());
+            std::cout << std::format("  lea {}(%rip),%rax\n",arr.getName());
         }else {
-            std::cout << std::format("  lea {}(%rbp),%rax\n",arr.elemOffset() + arr.getOffset());
+            std::cout << std::format("  lea {}(%rbp),%rax\n",arr.getOffset());
         }
+        std::cout << "  pop %rdi\n  add %rdi,%rax\n";
     }
     else if(node.equal(Node::Kind::N_deref)){
         auto prefix = dynamic_cast<prefixNode&>(node);
@@ -154,9 +164,20 @@ void codegenerator::visit(binaryNode& node) {
     }
 }
 
+void codegenerator::visit(whileStmt& S) {
+    static int level = 0;
+    std::string label = std::format(".while.{}", level++);
+    std::string end_label = ".while.end";
+    std::cout << std::format("{}:\n",label);
+    S.compileCond(*this);
+    std::cout << std::format("  cmp $0,%rax\n  je {}\n",end_label);
+    S.compileBOdy(*this);
+    std::cout << std::format("  jmp {}\n{}:\n",label,end_label);
+}
 
 void codegenerator::visit(ifStmt& S) {
-    int l = S.levelUp();
+    static int level = 0;
+    int l = level++;
     auto &cond = S.getCond();
     auto &then = S.getThen();
     auto &elseStmt = S.getElse();
@@ -175,7 +196,7 @@ void codegenerator::visit(ifStmt& S) {
 
 
 void codegenerator::visit(retStmt& S) {
-    S.getStmt()->accept(*this);
+    S.compileStmt(*this);
     std::cout << std::format("  jmp .L.{}.ret\n",retStmt::getName());
 }
 
@@ -196,18 +217,21 @@ void codegenerator::visit(arraydef& def) {
 }
 
 
+
+
 void codegenerator::visit(arrayVisit& v) {
     if(v.isArray()) {
         gen_addr(v);
         load(v);
-    }else {
+    }
+    else {
+        gen_offset(*this,v);
         if(v.isGlobal()) {
             std::cout << std::format("  lea {}(%rip),%rax\n",v.getName());
         }else {
             std::cout << std::format("  lea {}(%rbp),%rax\n",v.getOffset());
         }
-        std::cout << "  mov (%rax),%rax\n";
-        std::cout << std::format("  lea {}(%rax),%rax\n",v.elemOffset());
+        std::cout << "  mov (%rax),%rax\n  pop %rdi\n  add %rdi,%rax\n";
         if(v.getType()->getSize() == 1)
             std::cout << "  movsbq (%rax),%rax\n";
         else 
@@ -261,10 +285,7 @@ void codegenerator::visit(funcdef& f) {
 
 
 void codegenerator::visit(blockStmt& S) {
-    auto &stmts = S.getStmts();
-    for(auto& s: stmts) {
-        s->accept(*this);
-    }
+    S.compileStmts(*this);
 }
 
 void codegenerator::visit(Prog& p) {

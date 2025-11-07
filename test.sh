@@ -89,5 +89,8 @@ assert 2 "int main() { char a[3] = {1,2,3};return a[1];}"
 assert 98 "int main() { char *s = \"abc\";return s[1];}"
 assert 98 "int main() { char *s = \"abc\",*p = s;return p[1];}"
 assert 98 "int test(char *s) { s[0] = 98;} int main() { char *s = \"bbb\"; test(s);return s[0];}"
+assert 3 "int main() { int i = 0; while(i < 3) i = i+1;return i;}"
+assert 10 "int main() { int arr[3] = {2,3,5},i = 0,total = 0;while(i < 3){ total = total + arr[i]; i = i + 1;} return total; }"
+assert 10 "int main() { int arr[3] = {2,3,5},i = 0,total = 0,*p = arr;while(i < 3){ total = total + *p; p = p + 1;i=i+1;} return total; }"
 echo "OK"
 afterexit

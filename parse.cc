@@ -225,8 +225,7 @@ std::shared_ptr<Node> Parser::arrayvisit() {
         error(result.value()->getToken(),"subscripted value is neither array nor pointer\n");
     }
     tokenMove();
-    size_t idx = curToken().val;
-    tkskip(tokenType::T_num,"expect an num");
+    std::shared_ptr<Node> idx = parse_expr(precType::P_none);
     tkskip(tokenType::T_close_square,"expect ']'");
     return std::make_shared<arrayVisit>(obj,idx);
 }
@@ -543,6 +542,17 @@ std::shared_ptr<Stmt> Parser::ret_stmt() {
     return std::make_shared<retStmt>(s);
 }
 
+std::shared_ptr<Stmt> Parser::while_stmt() {
+    tokenMove();
+    tkskip(tokenType::T_open_paren,"expect '('");
+    std::shared_ptr<Node> cond = parse_expr(precType::P_none);
+    tkskip(tokenType::T_close_paren,"expect ')'");
+    std::shared_ptr<Stmt> body;
+    if(!tkconsume(tokenType::T_semicolon)) {
+        body = parse_stmt();
+    }
+    return std::make_shared<whileStmt>(cond,body);
+}
 
 std::shared_ptr<Stmt> Parser::parse_stmt() {
     if(tkequal(tokenType::T_open_block)) {
@@ -551,8 +561,9 @@ std::shared_ptr<Stmt> Parser::parse_stmt() {
         scope.leave();
         return s;
     } 
-    if(tkequal(tokenType::T_if)) return if_stmt();
+    if(tkequal(tokenType::T_if))     return if_stmt();
     if(tkequal(tokenType::T_return)) return ret_stmt();
+    if(tkequal(tokenType::T_while))  return while_stmt();
     return expr_stmt();
 }
 

@@ -53,6 +53,7 @@ private:
     std::shared_ptr<Stmt> ret_stmt();
     std::shared_ptr<Stmt> block_stmt();
     std::shared_ptr<Stmt> if_stmt();
+    std::shared_ptr<Stmt> while_stmt();
     std::shared_ptr<Stmt> expr_stmt();
     
     std::shared_ptr<Stmt> local_vars(std::shared_ptr<Type> type);

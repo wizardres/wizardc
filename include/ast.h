@@ -108,7 +108,7 @@ private:
 
 class arrayVisit final : public Node {
 public:
-    arrayVisit(std::shared_ptr<Obj> obj, size_t idx): _obj(obj), _idx(idx) {
+    arrayVisit(std::shared_ptr<Obj> obj, std::shared_ptr<Node> idx): _obj(obj), _idx(idx) {
         _tok = obj->getToken();
         auto Ty = _obj->getType();
         if(Type::isArray(Ty)) {
@@ -131,13 +131,13 @@ public:
     bool isArray()const { return _is_array; }
 
     std::string getName()const { return _tok.str; }
-    int elemOffset()const { return _idx * typeSize(); }
     int getOffset()const { return _offset; }
+    std::shared_ptr<Node> get_idx()const { return _idx; }
 
     size_t typeSize()const override{ return _baseTy->getSize(); }
     std::shared_ptr<Type> getType()const override { return _baseTy; }
-    bool equal(Node::Kind kind)const override { return kind == Kind::N_arrayvisit; }
     
+    bool equal(Node::Kind kind)const override { return kind == Kind::N_arrayvisit; }
     size_t strLength()const override{ return _tok.str.length(); }
     size_t strStart()const override{ return _tok.start; }
     std::string strView()const override { return _tok.str; }
@@ -145,11 +145,11 @@ public:
     void accept(visitor& vis) override{ vis.visit(*this); }
 private:
     std::shared_ptr<Obj> _obj;
-    size_t _idx;
+    std::shared_ptr<Node> _idx;
+    std::shared_ptr<Type> _baseTy;
     token _tok;
     int _offset;
     bool _global;
-    std::shared_ptr<Type> _baseTy;
     bool _is_array;
 };
 
@@ -278,12 +278,13 @@ private:
     std::shared_ptr<Obj> _funcobj;
 };
 
-
 class Stmt {
 public:
     Stmt()=default;
-    virtual ~Stmt()=default;    
+    virtual ~Stmt()=default;
+
     virtual void accept(visitor& vis)=0;
+private:
 };
 
 class exprStmt final: public Stmt {
@@ -306,7 +307,7 @@ public:
     blockStmt()=default;
     ~blockStmt()=default;
     void accept(visitor& vis) override{ vis.visit(*this); }
-    const std::vector<std::shared_ptr<Stmt>> &getStmts()const { return stmts; }
+    void compileStmts(visitor &vis)const { for(auto &s : stmts) s->accept(vis); }
 
 private:
     std::vector<std::shared_ptr<Stmt>> stmts;
@@ -316,10 +317,10 @@ class retStmt final : public Stmt {
 public:
     retStmt()=default;
     ~retStmt()=default;
-    retStmt(std::shared_ptr<Stmt>&e):_e(std::move(e)) {}
+    retStmt(std::shared_ptr<Stmt> e):_e(e) {}
     void accept(visitor& vis) override{ vis.visit(*this); }
 
-    const std::shared_ptr<Stmt>& getStmt()const { return _e; }
+    void compileStmt(visitor &vis)const { _e->accept(vis); }
     static std::string getName() { return _funcname; }
     static void setFuncName(const std::string& name) { _funcname = name; }
 private:
@@ -327,29 +328,44 @@ private:
     static inline std::string _funcname;
 };
 
+class whileStmt final : public Stmt {
+public:
+    whileStmt(std::shared_ptr<Node> cond,std::shared_ptr<Stmt> body):_cond(cond),_body(body) {}
+    ~whileStmt()=default;
+    void accept(visitor& vis) override{ vis.visit(*this); }
+    void compileCond(visitor &vis) {
+        if(_cond) _cond->accept(vis);
+    }
+    void compileBOdy(visitor &vis) {
+        if(_body) _body->accept(vis);
+    }
+    
+private:
+    std::shared_ptr<Node> _cond;
+    std::shared_ptr<Stmt> _body;
+};
+
 
 class ifStmt final: public Stmt{
 public:
     ifStmt(std::shared_ptr<Node> &cond,
            std::shared_ptr<Stmt>& then,
-           std::shared_ptr<Stmt>& elseStmt):
+           std::shared_ptr<Stmt>& elseNode):
                     _cond(std::move(cond)),
                     _then(std::move(then)),
-                    _elseStmt(std::move(elseStmt)) { }
+                    _elseNode(std::move(elseNode)) { }
     ifStmt()=default;
     ~ifStmt()=default;
 
     void accept(visitor& vis) override{ vis.visit(*this); }
-    int levelUp() { return _level++; }
 
     const std::shared_ptr<Node>& getCond()const { return _cond; }
     const std::shared_ptr<Stmt>& getThen()const { return _then; }
-    const std::shared_ptr<Stmt>& getElse()const { return _elseStmt; }
+    const std::shared_ptr<Stmt>& getElse()const { return _elseNode; }
 private:
     std::shared_ptr<Node> _cond;
     std::shared_ptr<Stmt> _then;
-    std::shared_ptr<Stmt> _elseStmt;
-    static inline int _level{1};
+    std::shared_ptr<Stmt> _elseNode;
 };
 
 

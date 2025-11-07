@@ -11,6 +11,7 @@ class arrayVisit;
 class arraydef;
 class ifStmt;
 class exprStmt;
+class whileStmt;
 class blockStmt;
 class retStmt;
 class vardef;
@@ -33,6 +34,7 @@ public:
     virtual void visit(ifStmt&)=0;
     virtual void visit(exprStmt&)=0;
     virtual void visit(blockStmt&)=0;
+    virtual void visit(whileStmt&)=0;
     virtual void visit(retStmt&)=0;
     virtual void visit(vardef&)=0;
     virtual void visit(funcdef&)=0;
