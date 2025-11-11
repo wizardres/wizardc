@@ -8,182 +8,72 @@
 #include <optional>
 #include "type.h"
 
-class Obj{
-public:
-    enum class objKind { variable, function , array };    
-    virtual ~Obj()=default;
-    virtual objKind getKind()const=0;
-    virtual std::shared_ptr<Type> getType()const=0;
-    virtual size_t getObjSize()const=0;
-    virtual const token &getToken()const=0;
-};
-
-
-class varObj : public Obj{
-public:
-    varObj()=default;
-    ~varObj()=default;
-    varObj(const token &tok,
-           std::shared_ptr<Type> type,
-           bool isglobal,
-           int offset):
-        _tok(tok),
-        _type(std::move(type)),
-        _isglobal(isglobal),
-        _offset(offset) {}
-
-    objKind getKind()const override { return objKind::variable; };
-    std::shared_ptr<Type> getType()const override{ return _type; }
-    size_t getObjSize()const override { return _type->getSize(); }
-    virtual const token &getToken()const override { return _tok; }
-
-    int getOffset() { return _offset; }
-    bool isGlobal() { return _isglobal; }
-private:
+enum class SymbolType { S_var,S_array,S_func };
+struct SymbolInfo{
+    SymbolInfo(const token& tok,int offset,bool isglobal,const std::shared_ptr<Type> &type,SymbolType sty):
+               _tok(tok),
+               _offset(offset),
+               _isglobal(isglobal),
+               _type(type),
+               _sTy(sty) {}
     token _tok;
-    std::shared_ptr<Type> _type;
-    bool _isglobal;
     int _offset;
-};
-
-
-
-
-class arrayObj : public Obj {
-public:
-    arrayObj(const token &tok,
-             std::shared_ptr<Type> ty,
-             bool isglobal,
-             int offset):
-             _tok(tok),
-             _arrayTy(ty),
-             _isglobal(isglobal),
-             _offset(offset) {}
-    ~arrayObj()=default;
-
-    std::shared_ptr<Type> getElemType()const { return static_cast<arrayType*>(_arrayTy.get())->elemTy(); }
-    size_t getElemSize()const { return static_cast<arrayType*>(_arrayTy.get())->elemSize(); }
-    size_t len()const { return static_cast<arrayType*>(_arrayTy.get())->getlen(); }
-
-    size_t getObjSize()const override { return _arrayTy->getSize(); }
-    objKind getKind()const override { return objKind::array; };
-    std::shared_ptr<Type> getType()const override{ return _arrayTy; }
-    virtual const token &getToken()const override { return _tok; }
-
-    int getOffset() { return _offset; }
-    bool isGlobal() { return _isglobal; }
-private:
-    token _tok;
-    std::shared_ptr<Type> _arrayTy;
     bool _isglobal;
-    int _offset;
-};
-
-
-class funcObj : public Obj {
-public:
-    funcObj()=default;
-    ~funcObj()=default;
-    funcObj(const token& tok,std::shared_ptr<Type> type):
-            _tok(tok),
-            _type(type) {}
-
-    std::shared_ptr<Type> getType()const override{ return _type; }
-    std::shared_ptr<Type> getRetType()const{ return static_cast<funcType*>(_type.get())->getRetType(); }
-    const std::vector<std::shared_ptr<Type>> &getParamTypes()const { return static_cast<funcType*>(_type.get())->getParamTypes(); }
-    size_t getObjSize()const override { return _type->getSize(); }
-
-    objKind getKind()const override { return objKind::function; };
-    const token &getToken()const override { return _tok; }
-private:
-    token _tok;
     std::shared_ptr<Type> _type;
-};
-
-
-class objFactor {
-public:
-    static std::shared_ptr<Obj> getVariable(token& tok,std::shared_ptr<Type> type,bool isglobal,int offset) {
-        return std::make_shared<varObj>(tok,type,isglobal,offset);
-    }
-    static std::shared_ptr<Obj> getArray(const token& tok,std::shared_ptr<Type> type,bool isglobal,int offset) {
-        return std::make_shared<arrayObj>(tok,type,isglobal,offset);
-    }
-    static std::shared_ptr<Obj> getFunction(const token& tok,std::shared_ptr<Type> type) {
-        return std::make_shared<funcObj>(tok,type);
-    }
+    SymbolType _sTy;
 };
 
 
 
-class symbol {
+class Scope {
 public:
-    symbol()=default;
-    void insert(const std::string& name,std::shared_ptr<Obj> obj) {
-        objs.insert({name,obj});
+    Scope()=default;
+    ~Scope()=default;
+    void insert(const std::string& name,const SymbolInfo& info) {
+        _symbols.emplace(name,info);
     }
-    std::optional<std::shared_ptr<Obj>> lookup(const std::string& name) {
-        auto it = objs.find(name);
-        if(it != objs.end()) {
+
+    std::optional<SymbolInfo> lookup(const std::string& name) {
+        if(auto it = _symbols.find(name); it != _symbols.end()) {
             return it->second;
         }
         return std::nullopt;
     }
 private:
-    std::unordered_map<std::string,std::shared_ptr<Obj>> objs;
+    std::unordered_map<std::string,SymbolInfo> _symbols;
 };
 
 
-class Scope{
+class SymbolTable{
 public:
-    void enter(){
-        cur++;
-        localVars.push_back(symbol{});
+    void enter(){ _locals.push_back({}); }
+    void leave(){ _locals.pop_back(); }
+    bool addSymbol(bool global,const std::string& name,const SymbolInfo& info) {
+        if(!reDefined(global,name)) {
+            if(global) _globals.insert(name,info);
+            else _locals.back().insert(name,info);
+            return true;
+        }
+        return false;
     }
-    void leave(){
-        localVars.pop_back();
-        cur--;
-    }
-    bool isglobal(){
-        return cur == -1;
-    }
-
-    bool insertObj(bool isglobal,const std::string& name,std::shared_ptr<Obj> obj) {
-        if(isglobal) return insert_global(name,obj);
-        else return insert_local(name,obj);
-    }
-
-    std::optional<std::shared_ptr<Obj>> lookup_allscope(const std::string& name){
-        for(int i = cur; i >= 0; i--){
-            symbol& s = localVars[i];
-            auto it = s.lookup(name);
-            if(it.has_value()){
-                return it.value();
+    std::optional<SymbolInfo> lookup(const std::string& name) {
+        for(auto p = _locals.rbegin(); p != _locals.rend(); ++p) {
+            if(auto it = p->lookup(name); it.has_value()) {
+                return it;
             }
         }
-        return lookup_global(name);
+        auto p = _globals.lookup(name);
+        return p;
     }
-    std::optional<std::shared_ptr<Obj>> lookup_global(const std::string& name) {
-        return globalVars.lookup(name);
-    }
-
-    std::optional<std::shared_ptr<Obj>> lookup_curscope(const std::string& name) {
-        return localVars[cur].lookup(name);
+    static SymbolInfo newSymbol(const token& tok,int offset,bool isglobal,const std::shared_ptr<Type> &type,SymbolType sty) {
+        return SymbolInfo(tok,offset,isglobal,type,sty);
     }
 private:
-    bool insert_local(const std::string& name,std::shared_ptr<Obj> obj) {
-        if(lookup_curscope(name).has_value()) return false;
-        localVars[cur].insert(name,obj);
-        return true;
+    bool reDefined(bool global,const std::string& name) {
+        if(global) return _globals.lookup(name).has_value();
+        else return _locals[_locals.size()-1].lookup(name).has_value();
     }
-
-    bool insert_global(const std::string& name,std::shared_ptr<Obj> obj) {
-        if(globalVars.lookup(name).has_value()) return false;
-        globalVars.insert(name,obj);
-        return true;
-    }
-    std::vector<symbol> localVars;
-    static inline symbol globalVars;
-    int cur{-1};
+    std::vector<Scope> _locals;
+    Scope _globals;
 };
 #endif

@@ -66,14 +66,14 @@ private:
     std::shared_ptr<Node> identifier();
     std::shared_ptr<Node> arrayvisit();
 
-    std::shared_ptr<Node> var_init(std::shared_ptr<Obj> obj);
-    std::shared_ptr<Node> array_init(std::shared_ptr<Obj> obj);
+    std::shared_ptr<Node> var_init(const SymbolInfo& info);
+    std::shared_ptr<Node> array_init(const SymbolInfo& info);
 private:
 
     std::shared_ptr<Type> declType();
     std::shared_ptr<Type> declspec();
     std::shared_ptr<Type> pointerPrefix(std::shared_ptr<Type> base);
-    std::shared_ptr<Obj> varTypeSuffix(std::shared_ptr<Type> type);
+    SymbolInfo varTypeSuffix(std::shared_ptr<Type> type,bool global);
     
     void error(const token& t,std::string_view msg);
     void error(int start,int hint_len,std::string_view msg);
@@ -93,6 +93,7 @@ private:
     bool is_function();
 private:
     lexer lex;
+    SymbolTable sTable;
     int prev{-1};
     int cur{-1};
     std::vector<token> tokens;

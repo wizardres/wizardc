@@ -1,6 +1,5 @@
 #include "include/parse.h"
 
-Scope scope;
 std::vector<std::shared_ptr<Stmt>> global_def;
 #ifdef DEBUG
 std::map<tokenType,std::string> tokenstrs {
@@ -171,7 +170,7 @@ std::shared_ptr<Node> Parser::parse_string() {
 
 std::shared_ptr<Node> Parser::identifier() {
     const std::string& str = prevToken().str;
-    auto result = scope.lookup_allscope(str);
+    auto result = sTable.lookup(str);
     if(!result.has_value()) {
         error(prevToken(),std::format("'{}' undeclared",str));
     }
@@ -182,12 +181,12 @@ std::shared_ptr<Node> Parser::identifier() {
 std::shared_ptr<Node> Parser::funcall() {
     token tok = prevToken();
     const std::string& name = tok.str;
-    auto result = scope.lookup_global(name);
+    auto result = sTable.lookup(name);
     if(!result.has_value()) {
         error(tok,std::format("function '{}' not found",name));
     }
-    auto funcobj = result.value();
-    auto param_types = static_cast <funcObj*>(funcobj.get())->getParamTypes();
+    const auto& info = result.value();
+    auto param_types = static_cast<funcType*>(info._type.get())->getParamTypes();
 
     std::vector<std::shared_ptr<Node>> args;
     tokenMove();
@@ -209,25 +208,26 @@ std::shared_ptr<Node> Parser::funcall() {
             error(args[j]->strStart(),args[j]->strLength(),std::format("parameter expected '{}' but argument has '{}'",param_types[j]->typestr(),msg));
         }
     }
-    return std::make_shared<funcallNode>(tok,args,funcobj);
+    auto retTy = static_cast<funcType*>(info._type.get())->getRetType();
+    return std::make_shared<funcallNode>(tok,args,SymbolInfo(tok,0,true,retTy,SymbolType::S_func));
 }
 
 
 std::shared_ptr<Node> Parser::arrayvisit() {
     const std::string& name = prevToken().str;
-    auto result = scope.lookup_allscope(name);
+    auto result = sTable.lookup(name);
     if(!result.has_value()) {
         error(prevToken(),std::format("'{}' not found",name));
     }
-    auto obj = result.value();
-    auto ty = obj->getType();
+    const auto& info = result.value();
+    auto ty = info._type;
     if(!Type::isArray(ty) && !Type::isPointer(ty)) {
-        error(result.value()->getToken(),"subscripted value is neither array nor pointer\n");
+        error(prevToken(),"subscripted value is neither array nor pointer\n");
     }
     tokenMove();
     std::shared_ptr<Node> idx = parse_expr(precType::P_none);
     tkskip(tokenType::T_close_square,"expect ']'");
-    return std::make_shared<arrayVisit>(obj,idx);
+    return std::make_shared<arrayVisit>(info,idx);
 }
 
 
@@ -406,46 +406,45 @@ bool Parser::is_function() {
 }
 
 
-std::shared_ptr<Obj> Parser::varTypeSuffix(std::shared_ptr<Type> type) {
+SymbolInfo Parser::varTypeSuffix(std::shared_ptr<Type> type,bool global) {
     type = pointerPrefix(type);
     token tok = curToken();
     tkskip(tokenType::T_identifier,"expect an identifier");
     const std::string& name = tok.str;
-    bool isglobal = scope.isglobal();
     int off = 0;
     if(is_array()) {
             tokenMove();
             int len = curToken().val;
             tkskip(tokenType::T_num,"expect a number");
             tkskip(tokenType::T_close_square,"expect ']'");
-            if(!isglobal)
+            if(!global)
                 off = funcdef::newlocalVar(type->getSize() * len);
-            auto obj = objFactor::getArray(tok,typeFactor::getArrayType(len,type),isglobal,off);
-            scope.insertObj(isglobal,name,obj);
-            return obj;
+            auto info = SymbolTable::newSymbol(tok,off,global,typeFactor::getArrayType(len,type),SymbolType::S_array);
+            sTable.addSymbol(global,name,info);
+            return info;
     }
     else{
         keywordCheck(tok,name);
-        std::shared_ptr<Obj> obj;
-        if(!isglobal) {
+        if(!global) {
             off = funcdef::newlocalVar(type->getSize());
         }
-        obj = objFactor::getVariable(tok,type,isglobal,off); 
-        bool result = scope.insertObj(isglobal,name,obj); 
+        auto info = SymbolTable::newSymbol(tok,off,global,type,SymbolType::S_var);
+        bool result = sTable.addSymbol(global,name,info); 
         if(!result){
             error(curToken(),std::format("redefine variable: '{}'",name));
         }
-        return obj;
+        return info;
     }
 }
 
-std::shared_ptr<Node> Parser::var_init(std::shared_ptr<Obj> obj) {
+
+std::shared_ptr<Node> Parser::var_init(const SymbolInfo& info) {
     if(!tkconsume(tokenType::T_assign)) {
-        return std::make_shared<identNode>(obj);
+        return std::make_shared<identNode>(info);
     }
     else {
         token op = prevToken();
-        std::shared_ptr<Node> var = std::make_shared<identNode>(obj);
+        std::shared_ptr<Node> var = std::make_shared<identNode>(info);
         std::shared_ptr<Node> value = parse_expr(precType::P_none);
         try{
             typeChecker::checkEqual(var->getType(),value->getType());
@@ -458,13 +457,13 @@ std::shared_ptr<Node> Parser::var_init(std::shared_ptr<Obj> obj) {
 }
 
 
-std::shared_ptr<Node> Parser::array_init(std::shared_ptr<Obj> obj) {
+std::shared_ptr<Node> Parser::array_init(const SymbolInfo& info) {
     std::vector<std::shared_ptr<Node>> init_lst;
     if(tkconsume(tokenType::T_assign)) {
         tkskip(tokenType::T_open_block,"expect '{'");
         while(1) {
             std::shared_ptr<Node> elem = parse_expr(precType::P_none);
-            auto elemty = static_cast<arrayObj*>(obj.get())->getElemType();
+            auto elemty = static_cast<arrayType*>(info._type.get())->elemTy();
             try{
                 typeChecker::checkEqual(elem->getType(),elemty);
              } catch(std::string& msg) {
@@ -482,12 +481,12 @@ std::shared_ptr<Node> Parser::array_init(std::shared_ptr<Obj> obj) {
                 error(curToken(),"expect '}'");
             }
         }
-        size_t len = static_cast<arrayObj*>(obj.get())->len();
+        size_t len = static_cast<arrayType*>(info._type.get())->getlen();
         if(len < init_lst.size()) {
-            error(obj->getToken(),std::format("array initialization needs {} elements,but {} in {}",len,init_lst.size(),"{...}"));
+            error(info._tok,std::format("array initialization needs {} elements,but {} in {}",len,init_lst.size(),"{...}"));
         }
     }
-    return std::make_shared<arraydef>(obj,init_lst);
+    return std::make_shared<arraydef>(info,init_lst);
 }
 
 
@@ -501,11 +500,11 @@ std::shared_ptr<Stmt> Parser::local_vars() {
         if(!first) {
             if(Type::isPointer(type)) type = static_cast<pointerType*>(type.get())->getBaseType();
         }
-        auto obj = varTypeSuffix(type);
-        if(obj->getKind() == Obj::objKind::variable) {
-            vars.push_back(var_init(obj));
+        auto info = varTypeSuffix(type,false);
+        if(info._sTy == SymbolType::S_var) {
+            vars.push_back(var_init(info));
         }else{
-            vars.push_back(array_init(obj));
+            vars.push_back(array_init(info));
         }
         if(tkconsume(tokenType::T_comma)){
             first = false;
@@ -567,7 +566,7 @@ std::shared_ptr<Stmt> Parser::for_stmt() {
     std::shared_ptr<Stmt> cond;
     std::shared_ptr<Node> inc;
     std::shared_ptr<Stmt> body;
-    scope.enter();
+    sTable.enter();
     init = init_stmt();
     cond = expr_stmt();
     if(!tkconsume(tokenType::T_close_paren)){
@@ -575,16 +574,16 @@ std::shared_ptr<Stmt> Parser::for_stmt() {
         tkskip(tokenType::T_close_paren,"expect ')'");
     } 
     body = parse_stmt();
-    scope.leave();
+    sTable.leave();
     return std::make_shared<forStmt>(init,cond,inc,body);
 }
 
 
 std::shared_ptr<Stmt> Parser::parse_stmt() {
     if(tkequal(tokenType::T_open_block)) {
-        scope.enter();
+        sTable.enter();
         std::shared_ptr<Stmt> s = block_stmt();
-        scope.leave();
+        sTable.leave();
         return s;
     } 
     if(tkconsume(tokenType::T_if))     return if_stmt();
@@ -610,12 +609,12 @@ std::vector<std::shared_ptr<Node>> Parser::funcParams(
         }
         first = true;
         auto type = declType();
-        params.push_back(std::make_shared<identNode>(varTypeSuffix(type)));
+        params.push_back(std::make_shared<identNode>(varTypeSuffix(type,false)));
         paramTypes.push_back(std::move(type));
     }
     tkskip(tokenType::T_close_paren,"expect ')'");
-    bool isglobal = true;
-    scope.insertObj(isglobal,name,objFactor::getFunction(tok,typeFactor::getFuncType(retType,paramTypes)));
+    auto info = SymbolTable::newSymbol(tok,0,true,typeFactor::getFuncType(retType,paramTypes),SymbolType::S_func);
+    sTable.addSymbol(true,name,info);
     return params;
 }
 
@@ -624,10 +623,10 @@ std::vector<std::shared_ptr<Node>> Parser::funcParams(
 std::shared_ptr<Stmt> Parser::decl_func(std::shared_ptr<Type> retType) {
     token tok = prevToken();
     tokenMove();
-    scope.enter();
+    sTable.enter();
     std::vector<std::shared_ptr<Node>> _params = funcParams(tok,retType);
     std::shared_ptr<Stmt> body = block_stmt();
-    scope.leave();
+    sTable.leave();
     auto func = funcdef::newFunction(body,tok.str,_params);
     return func;
 }
@@ -636,12 +635,12 @@ std::shared_ptr<Stmt> Parser::decl_func(std::shared_ptr<Type> retType) {
 std::shared_ptr<Stmt> Parser::global_vars(std::shared_ptr<Type> type) {
     std::vector<std::shared_ptr<Node>> vars;
     while(1) {
-        auto obj = varTypeSuffix(type);
-        if(obj->getKind() == Obj::objKind::variable) {
-            vars.push_back(std::make_shared<identNode>(obj));
+        auto info = varTypeSuffix(type,true);
+        if(info._sTy == SymbolType::S_var) {
+            vars.push_back(std::make_shared<identNode>(info));
         }else {
             std::vector<std::shared_ptr<Node>> init;
-            vars.push_back(std::make_shared<arraydef>(obj,init));
+            vars.push_back(std::make_shared<arraydef>(info,init));
         }
         if(tkconsume(tokenType::T_comma)){
             continue;
